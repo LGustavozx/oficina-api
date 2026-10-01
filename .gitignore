@@ -1,0 +1,20 @@
+# Segredos e ambiente
+.env
+*.pem
+*.key
+
+# Build e testes
+/bin/
+*.exe
+*.test
+*.out
+coverage.*
+
+# IDE e SO
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Claude Code (configuração local)
+.claude/

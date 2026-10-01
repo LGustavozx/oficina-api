@@ -1,0 +1,11 @@
+DROP TABLE IF EXISTS movimentacoes_estoque;
+DROP TABLE IF EXISTS os_historico_status;
+DROP TABLE IF EXISTS os_itens_peca;
+DROP TABLE IF EXISTS os_itens_servico;
+DROP TABLE IF EXISTS ordens_servico;
+DROP SEQUENCE IF EXISTS ordens_servico_numero_seq;
+DROP TABLE IF EXISTS pecas;
+DROP TABLE IF EXISTS servicos;
+DROP TABLE IF EXISTS veiculos;
+DROP TABLE IF EXISTS clientes;
+DROP TABLE IF EXISTS usuarios;
