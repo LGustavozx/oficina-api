@@ -23,7 +23,7 @@ func TestCategorias(t *testing.T) {
 				t.Errorf("errors.Is deveria reconhecer %v", c.cat)
 			}
 			outra := ErrConflito
-			if c.cat == ErrConflito {
+			if errors.Is(c.cat, ErrConflito) {
 				outra = ErrValidacao
 			}
 			if errors.Is(c.err, outra) {
