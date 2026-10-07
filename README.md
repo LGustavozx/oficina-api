@@ -76,12 +76,13 @@ Detalhes em [Segurança](docs/07-seguranca.md).
 ```
 cmd/api/            ponto de entrada e composição
 internal/
-  ordemservico/     contexto core
-  cadastro/         clientes e veículos
-  catalogo/         serviços
-  estoque/          peças e insumos
-  identidade/       usuários e JWT
-  shared/           erros, dinheiro, relógio, logger
+  workorder/        contexto core (ordens de serviço)
+  registry/         clientes e veículos
+  catalog/          serviços
+  inventory/        peças e insumos
+  identity/         usuários e JWT
+  platform/         banco, servidor HTTP e utilitários HTTP
+  shared/           erros, dinheiro, relógio, configuração
 migrations/         SQL versionado
 docs/               documentação (DDD, arquitetura, API, segurança, ADRs)
 ```

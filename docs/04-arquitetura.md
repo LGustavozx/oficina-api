@@ -38,20 +38,28 @@ flowchart TB
 ├── cmd/
 │   └── api/main.go                 # composição (injeção de dependências)
 ├── internal/
-│   ├── cadastro/                   # contexto: clientes e veículos
-│   │   ├── domain/                 #   cliente.go, veiculo.go, documento.go, placa.go, repositorio.go
+│   ├── registry/                   # contexto Cadastro: clientes e veículos
+│   │   ├── domain/                 #   customer.go, vehicle.go, document.go, plate.go, repository.go
 │   │   ├── application/            #   casos de uso
 │   │   ├── infrastructure/         #   repositório postgres
 │   │   └── http/                   #   handlers e DTOs
-│   ├── catalogo/                   # contexto: serviços
-│   ├── estoque/                    # contexto: peças e insumos
-│   ├── ordemservico/               # contexto core
-│   │   ├── domain/                 #   ordem_servico.go, status.go, orcamento.go, eventos.go
-│   │   ├── application/            #   criar_os, enviar_orcamento, aprovar, finalizar...
+│   ├── catalog/                    # contexto Catálogo de Serviços
+│   ├── inventory/                  # contexto Estoque: peças e insumos
+│   ├── workorder/                  # contexto Ordem de Serviço (core)
+│   │   ├── domain/                 #   work_order.go, status.go, quote.go, events.go
+│   │   ├── application/            #   create_order, send_quote, approve, finish...
 │   │   ├── infrastructure/
 │   │   └── http/
-│   ├── identidade/                 # usuários e JWT
-│   └── shared/                     # erros, dinheiro, relógio, logger, transação
+│   ├── identity/                   # contexto Identidade e Acesso (implementado)
+│   │   ├── domain/                 #   user.go, ports.go
+│   │   ├── application/            #   authenticate.go, ensure_admin.go
+│   │   ├── infrastructure/         #   security/ (bcrypt, JWT) e postgres/
+│   │   └── http/                   #   handler.go (login, /admin/me) e middleware
+│   ├── platform/                   # infraestrutura transversal
+│   │   ├── database/               #   pool pgx e migrations
+│   │   ├── httpserver/             #   roteador, /health, /ready, registro de módulos
+│   │   └── httpx/                  #   JSON, decodificação segura, mapeamento de erros
+│   └── shared/                     # apperr, money, clock, config
 ├── migrations/                     # SQL versionado
 ├── docs/                           # esta documentação + swagger gerado
 ├── Dockerfile
@@ -59,7 +67,11 @@ flowchart TB
 └── .env.example
 ```
 
-> Cada contexto tem as quatro camadas internas. Contextos só se comunicam por **interfaces** declaradas no consumidor (ex.: `ordemservico` declara `ControleEstoque`; `estoque` a implementa), montadas em `cmd/api`.
+> Cada contexto tem as quatro camadas internas. Contextos só se comunicam por **interfaces** declaradas no consumidor (ex.: `workorder` declara `StockControl`; `inventory` a implementa), montadas em `cmd/api`.
+
+**Convenção de nomes:** identificadores do código (tipos, funções, variáveis, campos, pacotes) são em **inglês**; comentários são em **português**. Os contratos externos permanecem em português: rotas, campos JSON, tabelas/colunas do banco, códigos de erro e mensagens ao usuário. A correspondência com a linguagem ubíqua está em [3.1](03-ddd.md#31-linguagem-ubíqua).
+
+**Registro de módulos:** cada contexto implementa `httpserver.Module` (`Register(public, admin chi.Router)`). Tudo registrado em `admin` fica sob `/api/v1/admin` e passa pelo middleware JWT, inclusive rotas inexistentes (respondem 401, sem revelar a estrutura da API).
 
 ## 4.4 Fluxo: abertura de OS e envio de orçamento
 

@@ -13,7 +13,7 @@ func setBase(t *testing.T) {
 	t.Setenv("APP_PORT", "")
 }
 
-func TestLoad_Valida(t *testing.T) {
+func TestLoad_Valid(t *testing.T) {
 	setBase(t)
 	cfg, err := Load()
 	if err != nil {
@@ -24,17 +24,17 @@ func TestLoad_Valida(t *testing.T) {
 	}
 }
 
-func TestLoad_Erros(t *testing.T) {
-	casos := map[string]func(t *testing.T){
+func TestLoad_Errors(t *testing.T) {
+	cases := map[string]func(t *testing.T){
 		"sem database url": func(t *testing.T) { t.Setenv("DATABASE_URL", "") },
 		"segredo curto":    func(t *testing.T) { t.Setenv("JWT_SECRET", "curto") },
-		"ttl invalido":     func(t *testing.T) { t.Setenv("JWT_TTL_MINUTES", "abc") },
+		"ttl inválido":     func(t *testing.T) { t.Setenv("JWT_TTL_MINUTES", "abc") },
 		"ttl zero":         func(t *testing.T) { t.Setenv("JWT_TTL_MINUTES", "0") },
 	}
-	for nome, mutar := range casos {
-		t.Run(nome, func(t *testing.T) {
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
 			setBase(t)
-			mutar(t)
+			mutate(t)
 			if _, err := Load(); err == nil {
 				t.Fatal("esperava erro")
 			}

@@ -6,10 +6,16 @@ set -euo pipefail
 MINIMO="${COBERTURA_MINIMA:-80}"
 
 PACOTES=(
-  ./internal/cadastro/domain
-  ./internal/shared/erros
-  ./internal/shared/dinheiro
-  ./internal/shared/relogio
+  ./internal/registry/domain
+  ./internal/identity/domain
+  ./internal/identity/application
+  ./internal/identity/infrastructure/security
+  ./internal/identity/http
+  ./internal/platform/httpx
+  ./internal/platform/httpserver
+  ./internal/shared/apperr
+  ./internal/shared/money
+  ./internal/shared/clock
 )
 
 saida="$(go test -cover "${PACOTES[@]}")"

@@ -19,6 +19,32 @@
 | **Movimentação** | Registro de entrada, reserva ou baixa de estoque |
 | **Tempo de execução** | Intervalo entre o início da execução e a finalização |
 
+### Correspondência com os nomes no código
+
+A linguagem ubíqua é em português; os identificadores do código são em inglês. Esta tabela é a ponte entre os dois (os já implementados estão marcados com ✔).
+
+| Linguagem ubíqua | Código | Pacote |
+|------------------|--------|--------|
+| Cadastro | `registry` ✔ | `internal/registry` |
+| Catálogo de Serviços | `catalog` | `internal/catalog` |
+| Estoque | `inventory` | `internal/inventory` |
+| Ordem de Serviço | `workorder` / `WorkOrder` | `internal/workorder` |
+| Identidade e Acesso | `identity` ✔ | `internal/identity` |
+| Cliente | `Customer` | `registry` |
+| Veículo | `Vehicle` | `registry` |
+| CPF/CNPJ | `Document` ✔ (`Individual` PF, `Company` PJ) | `registry/domain` |
+| Placa | `Plate` ✔ | `registry/domain` |
+| Serviço | `Service` | `catalog` |
+| Peça / Insumo | `Part` (`PART`, `SUPPLY`) | `inventory` |
+| Item de Serviço / Item de Peça | `ServiceItem` / `PartItem` | `workorder` |
+| Orçamento | `Quote` | `workorder` |
+| Aprovação | `Approval` | `workorder` |
+| Movimentação de estoque | `StockMovement` | `inventory` |
+| Valor monetário | `Money` ✔ | `shared/money` |
+| Usuário / Perfil | `User` ✔ / `Role` ✔ | `identity/domain` |
+
+Métodos do agregado `OrdemServico` (3.4): `IniciarDiagnostico` → `StartDiagnosis`, `EnviarOrcamento` → `SendQuote`, `Aprovar` → `Approve`, `Rejeitar` → `Reject`, `Finalizar` → `Finish`, `Entregar` → `Deliver`, `Cancelar` → `Cancel`.
+
 ## 3.2 Subdomínios
 
 | Subdomínio | Tipo | Justificativa |

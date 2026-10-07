@@ -23,10 +23,13 @@ flowchart TB
 
 | Domínio crítico | Pacote | Justificativa |
 |-----------------|--------|---------------|
-| Ordem de Serviço | `internal/ordemservico/domain` e `application` | Core do negócio |
-| Estoque | `internal/estoque/domain` e `application` | Integridade de quantidades |
-| Validações (CPF/CNPJ, placa) | `internal/cadastro/domain` | Dados sensíveis |
-| Identidade | `internal/identidade` | Segurança |
+| Ordem de Serviço | `internal/workorder/domain` e `application` | Core do negócio |
+| Estoque | `internal/inventory/domain` e `application` | Integridade de quantidades |
+| Validações (CPF/CNPJ, placa) | `internal/registry/domain` | Dados sensíveis |
+| Identidade | `internal/identity/{domain,application,http}` e `infrastructure/security` | Segurança |
+| Base compartilhada | `internal/shared/{apperr,money,clock}` e `internal/platform/{httpx,httpserver}` | Usada por todos os contextos |
+
+A lista efetiva fica em `scripts/check-coverage.sh` e cresce a cada fase. Repositórios Postgres e `cmd/api` ficam fora do portão de 80%; os repositórios são cobertos por testes de integração com banco real.
 
 Cobertura medida por pacote; o pipeline **falha** abaixo de 80% nesses pacotes.
 
@@ -82,7 +85,7 @@ go tool cover -func=coverage.out
 | Injeção de dependência explícita | Construtores em `cmd/api`, sem estado global |
 | Relógio e IDs injetáveis | Testes determinísticos |
 | Erros | `errors.Is/As`, erros de domínio tipados, *wrapping* com contexto |
-| Convenções | Nomes em português para o domínio (linguagem ubíqua), código de infraestrutura em inglês técnico **[Premissa]** |
+| Convenções | Identificadores em **inglês**, comentários em **português**; contratos externos (rotas, JSON, SQL, códigos de erro, mensagens) em português |
 
 ## 8.5 Integração contínua (proposta)
 
