@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Falha se a cobertura de algum domínio crítico ficar abaixo do mínimo (padrão: 80%).
-# Acrescente novos pacotes críticos à lista PACOTES conforme as fases avançam.
+# Acrescente novos pacotes críticos à lista PACKAGES conforme as fases avançam.
 set -euo pipefail
 
-MINIMO="${COBERTURA_MINIMA:-80}"
+MIN_COVERAGE="${MIN_COVERAGE:-80}"
 
-PACOTES=(
+PACKAGES=(
   ./internal/registry/domain
   ./internal/identity/domain
   ./internal/identity/application
@@ -18,18 +18,18 @@ PACOTES=(
   ./internal/shared/clock
 )
 
-saida="$(go test -cover "${PACOTES[@]}")"
-echo "$saida"
+output="$(go test -cover "${PACKAGES[@]}")"
+echo "$output"
 
-falhou=0
-while read -r pacote pct; do
-  if awk -v p="$pct" -v m="$MINIMO" 'BEGIN { exit !(p < m) }'; then
-    echo "FALHA: $pacote com cobertura ${pct}% (mínimo ${MINIMO}%)"
-    falhou=1
+failed=0
+while read -r pkg pct; do
+  if awk -v p="$pct" -v m="$MIN_COVERAGE" 'BEGIN { exit !(p < m) }'; then
+    echo "FALHA: $pkg com cobertura ${pct}% (mínimo ${MIN_COVERAGE}%)"
+    failed=1
   fi
-done < <(echo "$saida" | awk '/coverage:/ { for (i = 1; i <= NF; i++) if ($i == "coverage:") { gsub("%", "", $(i+1)); print $2, $(i+1) } }')
+done < <(echo "$output" | awk '/coverage:/ { for (i = 1; i <= NF; i++) if ($i == "coverage:") { gsub("%", "", $(i+1)); print $2, $(i+1) } }')
 
-if [ "$falhou" -ne 0 ]; then
+if [ "$failed" -ne 0 ]; then
   exit 1
 fi
-echo "Cobertura dos domínios críticos OK (mínimo ${MINIMO}%)."
+echo "Cobertura dos domínios críticos OK (mínimo ${MIN_COVERAGE}%)."
