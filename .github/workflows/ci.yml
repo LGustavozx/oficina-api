@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+
+  testes:
+    name: Testes e cobertura
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Verificar build e vet
+        run: |
+          go build ./...
+          go vet ./...
+      - name: Testes com detecção de race
+        run: go test ./... -race -coverprofile=coverage.out
+      - name: Cobertura mínima nos domínios críticos
+        run: bash scripts/check-coverage.sh
+      - name: Resumo de cobertura
+        run: go tool cover -func=coverage.out | tail -n 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cobertura
+          path: coverage.out
+
+  vulnerabilidades:
+    name: Vulnerabilidades
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./... | tee govulncheck.txt
+      - name: gosec
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -fmt=text -out=gosec.txt ./... || (cat gosec.txt && exit 1)
+          cat gosec.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: relatorio-vulnerabilidades
+          path: |
+            govulncheck.txt
+            gosec.txt

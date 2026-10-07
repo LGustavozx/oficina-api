@@ -36,7 +36,7 @@ func Migrate(pool *pgxpool.Pool) error {
 	}
 
 	db := stdlib.OpenDBFromPool(pool)
-	defer db.Close() // não fecha o pool, apenas libera o *sql.DB
+	defer func() { _ = db.Close() }() // não fecha o pool, apenas libera o *sql.DB
 
 	drv, err := migratepgx.WithInstance(db, &migratepgx.Config{})
 	if err != nil {
