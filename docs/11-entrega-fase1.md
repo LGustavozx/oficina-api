@@ -66,42 +66,51 @@ A branch, a tag e o hash devem corresponder ao código mostrado no vídeo e na d
 | Link para a documentação DDD | 12 | Escrito |
 | Link para o vídeo | 13 | **Pendente** |
 
-## 11.6 Fluxo de Git e proteção da `main`
+## 11.6 Fluxo de Git e proteção das branches
 
-A `main` deve estar protegida; nada entra nela sem Pull Request.
+A `main` e a `develop` são protegidas; nada entra nelas sem Pull Request e sem os checks do CI verdes.
 
-**Configuração em GitHub → Settings → Branches → Branch protection rules (`main`):**
+| Branch | Papel | Recebe PR de |
+|--------|-------|--------------|
+| `main` | Versão entregável; o hash final da entrega sai dela | `develop` (ao fim de cada marco) |
+| `develop` | Integração contínua do trabalho | `feature/*`, `fix/*`, `docs/*` |
+| `feature/*` | Trabalho de uma fase ou funcionalidade | — |
+
+**Configuração em GitHub → Settings → Branches → Branch protection rules (`main` e `develop`):**
 
 - [x] Require a pull request before merging
-- [x] Require approvals (mínimo 1)
-- [x] Require status checks to pass (lint, testes, cobertura, build)
+- [ ] Require approvals — **desativado**: o projeto é individual e o autor não pode aprovar o próprio PR
+- [x] Require status checks to pass before merging: `Lint`, `Testes e cobertura`, `Vulnerabilidades`
 - [x] Require branches to be up to date before merging
 - [x] Do not allow bypassing the above settings
-- [x] Restrict force pushes e deletions
+- [ ] Allow force pushes / Allow deletions — **desativados**
 
-**Fluxo de trabalho proposto**
+**Fluxo de trabalho**
 
 ```mermaid
 gitGraph
-    commit id: "docs iniciais"
-    branch feature/cadastro
-    commit id: "domínio cliente"
-    commit id: "testes"
+    commit id: "base (fase 0)"
+    branch develop
+    checkout develop
+    branch feature/fase-2-identidade
+    commit id: "login e JWT"
+    checkout develop
+    merge feature/fase-2-identidade id: "PR → develop"
+    branch feature/fase-3-cadastros
+    commit id: "CRUDs"
+    checkout develop
+    merge feature/fase-3-cadastros id: "PR → develop "
     checkout main
-    merge feature/cadastro id: "PR #1"
-    branch feature/ordem-servico
-    commit id: "máquina de estados"
-    checkout main
-    merge feature/ordem-servico id: "PR #2"
-    commit id: "tag v1.0.0-fase1" tag: "v1.0.0-fase1"
+    merge develop id: "PR develop → main" tag: "v1.0.0-fase1"
 ```
 
-| Item | Convenção **[Premissa]** |
-|------|--------------------------|
-| Branches | `feature/<contexto>-<resumo>`, `fix/...`, `docs/...` |
-| Commits | Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`) |
+| Item | Convenção |
+|------|-----------|
+| Branches | `feature/<fase>-<resumo>`, `fix/...`, `docs/...` |
+| Commits | Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`, `ci:`) |
 | PR | Descrição, requisitos atendidos (RF/RN), testes e evidências |
-| Merge | Squash ou merge commit após aprovação e checks verdes |
+| Merge | *Merge commit* após checks verdes |
+| Entrega | PR `develop` → `main`, tag `v1.0.0-fase1` e hash final registrado no PDF |
 
 ## 11.7 Evidências a coletar
 
