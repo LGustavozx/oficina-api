@@ -1,0 +1,35 @@
+# Nome fixo do projeto: os recursos (rede, volume) ficam como "oficina-api_*",
+# em vez de depender do nome da pasta.
+name: oficina-api
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-oficina}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oficina}
+      POSTGRES_DB: ${POSTGRES_DB:-oficina}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    environment:
+      HTTP_PORT: "8080"
+      # O host é "db": dentro da rede do compose, o nome do serviço vira o endereço.
+      DATABASE_URL: postgres://${POSTGRES_USER:-oficina}:${POSTGRES_PASSWORD:-oficina}@db:5432/${POSTGRES_DB:-oficina}?sslmode=disable
+    ports:
+      - "${HTTP_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
