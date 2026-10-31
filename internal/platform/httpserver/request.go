@@ -1,9 +1,12 @@
 package httpserver
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -11,18 +14,30 @@ import (
 )
 
 const (
-	CodeInvalidRequest = "INVALID_REQUEST"
-	CodeInvalidID      = "INVALID_ID"
-	CodeInvalidPaging  = "INVALID_PAGINATION"
+	CodeInvalidRequest  = "INVALID_REQUEST"
+	CodeInvalidEncoding = "INVALID_ENCODING"
+	CodeInvalidID       = "INVALID_ID"
+	CodeInvalidPaging   = "INVALID_PAGINATION"
 
 	maxBodyBytes     = 1 << 20
 	defaultPageLimit = 50
 	maxPageLimit     = 200
 )
 
-// DecodeJSON lê o corpo como JSON, recusando campos desconhecidos.
+// DecodeJSON lê o corpo como JSON, recusando campos desconhecidos e texto que
+// não esteja em UTF-8. Sem essa checagem, o decoder trocaria os bytes inválidos
+// por "�" em silêncio (acontece quando um terminal do Windows envia acentos em
+// outra codificação), e a mensagem de erro de quem validasse depois confundiria.
 func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+	if err != nil {
+		return apperr.Validation(CodeInvalidRequest, "corpo da requisição inválido")
+	}
+	if !utf8.Valid(body) {
+		return apperr.Validation(CodeInvalidEncoding, "o corpo da requisição deve estar em UTF-8")
+	}
+
+	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
 		return apperr.Validation(CodeInvalidRequest, "corpo da requisição inválido")
