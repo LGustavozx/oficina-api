@@ -7,8 +7,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 
+	"oficina-api/internal/platform/database"
 	"oficina-api/internal/registry/domain"
 	"oficina-api/internal/shared/apperr"
 )
@@ -40,7 +40,7 @@ func (r *VehicleRepository) Update(ctx context.Context, v domain.Vehicle) error 
 	if err != nil {
 		return wrapVehicleWrite(err, "atualizar veículo", customerMissing())
 	}
-	return requireAffected(result, vehicleNotFound())
+	return database.RequireAffected(result, vehicleNotFound())
 }
 
 func (r *VehicleRepository) Delete(ctx context.Context, id uuid.UUID) error {
@@ -48,7 +48,7 @@ func (r *VehicleRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	if err != nil {
 		return wrapVehicleWrite(err, "apagar veículo", vehicleInUse())
 	}
-	return requireAffected(result, vehicleNotFound())
+	return database.RequireAffected(result, vehicleNotFound())
 }
 
 func (r *VehicleRepository) FindByID(ctx context.Context, id uuid.UUID) (domain.Vehicle, error) {
@@ -125,18 +125,13 @@ func vehicleInUse() error {
 // O SQL state de violação de FK é o mesmo ao gravar com cliente inexistente e ao
 // apagar um veículo referenciado; quem chama diz qual dos dois casos é.
 func wrapVehicleWrite(err error, action string, foreignKeyErr error) error {
-	if err == nil {
+	switch {
+	case err == nil:
 		return nil
-	}
-
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		switch pgErr.Code {
-		case pgUniqueViolation:
-			return apperr.Conflict(domain.CodePlateTaken, "placa já cadastrada")
-		case pgForeignKeyViolation:
-			return foreignKeyErr
-		}
+	case database.IsUniqueViolation(err):
+		return apperr.Conflict(domain.CodePlateTaken, "placa já cadastrada")
+	case database.IsForeignKeyViolation(err):
+		return foreignKeyErr
 	}
 	return fmt.Errorf("registry: %s: %w", action, err)
 }

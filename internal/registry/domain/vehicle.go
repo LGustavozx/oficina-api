@@ -3,13 +3,12 @@ package domain
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 
 	"oficina-api/internal/shared/apperr"
+	"oficina-api/internal/shared/text"
 )
 
 const (
@@ -57,12 +56,12 @@ func (v Vehicle) apply(data VehicleData, now time.Time) (Vehicle, error) {
 		return Vehicle{}, err
 	}
 
-	brand, ok := cleanText(data.Brand, maxVehicleTextLength)
+	brand, ok := text.Clean(data.Brand, 1, maxVehicleTextLength)
 	if !ok {
 		return Vehicle{}, apperr.Validation(CodeInvalidBrand, "a marca deve ter entre 1 e 60 caracteres")
 	}
 
-	model, ok := cleanText(data.Model, maxVehicleTextLength)
+	model, ok := text.Clean(data.Model, 1, maxVehicleTextLength)
 	if !ok {
 		return Vehicle{}, apperr.Validation(CodeInvalidModel, "o modelo deve ter entre 1 e 60 caracteres")
 	}
@@ -74,16 +73,6 @@ func (v Vehicle) apply(data VehicleData, now time.Time) (Vehicle, error) {
 
 	v.CustomerID, v.Plate, v.Brand, v.Model, v.Year, v.UpdatedAt = data.CustomerID, plate, brand, model, data.Year, now
 	return v, nil
-}
-
-// cleanText apara o texto e confere o tamanho, recusando UTF-8 corrompido (U+FFFD).
-func cleanText(raw string, maxLength int) (string, bool) {
-	value := strings.TrimSpace(raw)
-	n := utf8.RuneCountInString(value)
-	if n < 1 || n > maxLength || strings.ContainsRune(value, utf8.RuneError) {
-		return "", false
-	}
-	return value, true
 }
 
 type VehicleRepository interface {
