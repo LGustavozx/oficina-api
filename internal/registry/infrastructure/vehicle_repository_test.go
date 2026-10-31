@@ -3,7 +3,6 @@ package infrastructure
 import (
 	"context"
 	"database/sql"
-	"math/rand/v2"
 	"testing"
 	"time"
 
@@ -13,17 +12,6 @@ import (
 	"oficina-api/internal/registry/domain"
 	"oficina-api/internal/shared/apperr"
 )
-
-func randomPlate() string {
-	letters := func(n int) string {
-		b := make([]byte, n)
-		for i := range b {
-			b[i] = byte('A' + rand.IntN(26))
-		}
-		return string(b)
-	}
-	return letters(3) + string([]byte{byte('0' + rand.IntN(10)), byte('0' + rand.IntN(10)), byte('0' + rand.IntN(10)), byte('0' + rand.IntN(10))})
-}
 
 // savedCustomer grava um cliente no banco; a limpeza roda depois da dos veículos
 // criados em seguida, porque o t.Cleanup executa na ordem inversa.
@@ -41,7 +29,7 @@ func newVehicle(t *testing.T, db *sql.DB, owner uuid.UUID) domain.Vehicle {
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	vehicle, err := domain.NewVehicle(uuid.New(), domain.VehicleData{
-		CustomerID: owner, Plate: randomPlate(), Brand: "Fiat", Model: "Uno", Year: 2010,
+		CustomerID: owner, Plate: testdb.RandomPlate(), Brand: "Fiat", Model: "Uno", Year: 2010,
 	}, now)
 	if err != nil {
 		t.Fatal(err)
