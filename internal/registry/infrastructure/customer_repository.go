@@ -46,7 +46,7 @@ func (r *CustomerRepository) Update(ctx context.Context, c domain.Customer) erro
 	if err != nil {
 		return wrapWrite(err, "atualizar cliente")
 	}
-	return requireAffected(result)
+	return requireAffected(result, customerNotFound())
 }
 
 func (r *CustomerRepository) Delete(ctx context.Context, id uuid.UUID) error {
@@ -54,7 +54,7 @@ func (r *CustomerRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	if err != nil {
 		return wrapWrite(err, "apagar cliente")
 	}
-	return requireAffected(result)
+	return requireAffected(result, customerNotFound())
 }
 
 func (r *CustomerRepository) FindByID(ctx context.Context, id uuid.UUID) (domain.Customer, error) {
@@ -101,7 +101,7 @@ func scanCustomer(row rowScanner) (domain.Customer, error) {
 
 	err := row.Scan(&c.ID, &c.Name, &rawDocument, &c.Email, &c.Phone, &c.CreatedAt, &c.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return domain.Customer{}, apperr.NotFound(domain.CodeCustomerNotFound, "cliente não encontrado")
+		return domain.Customer{}, customerNotFound()
 	}
 	if err != nil {
 		return domain.Customer{}, fmt.Errorf("registry: ler cliente: %w", err)
@@ -117,13 +117,17 @@ func scanCustomer(row rowScanner) (domain.Customer, error) {
 	return c, nil
 }
 
-func requireAffected(result sql.Result) error {
+func customerNotFound() error {
+	return apperr.NotFound(domain.CodeCustomerNotFound, "cliente não encontrado")
+}
+
+func requireAffected(result sql.Result, notFound error) error {
 	affected, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("registry: linhas afetadas: %w", err)
 	}
 	if affected == 0 {
-		return apperr.NotFound(domain.CodeCustomerNotFound, "cliente não encontrado")
+		return notFound
 	}
 	return nil
 }
