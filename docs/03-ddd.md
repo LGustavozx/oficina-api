@@ -15,6 +15,33 @@ O vocabulário do negócio é em português na documentação; no código, em in
 | Peça / insumo | `Part` |
 | Orçamento | `Quote` |
 | Estoque | `Stock` |
+| Movimentação de estoque | `StockMovement` |
+| Status da OS | `Status` |
+
+## Ordem de serviço
+
+```
+RECEIVED ──> IN_DIAGNOSIS ──> AWAITING_APPROVAL ──> IN_EXECUTION ──> COMPLETED ──> DELIVERED
+                                      │
+                                      └──> CANCELLED   (orçamento recusado)
+```
+
+| Status | Termo do negócio |
+|---|---|
+| `RECEIVED` | Recebida |
+| `IN_DIAGNOSIS` | Em diagnóstico |
+| `AWAITING_APPROVAL` | Aguardando aprovação |
+| `IN_EXECUTION` | Em execução |
+| `COMPLETED` | Finalizada |
+| `DELIVERED` | Entregue |
+| `CANCELLED` | Cancelada (acrescentado: sem ele, um orçamento recusado deixaria a OS presa) |
+
+Regras:
+
+- O status só muda pelas ações do domínio (`StartDiagnosis`, `SendQuote`, `Approve`, `Reject`, `Complete`, `Deliver`), e cada uma só vale a partir de um status específico.
+- Os itens (serviços e peças) só podem ser trocados antes do envio do orçamento. Cada item guarda o nome e o preço do momento em que entrou.
+- O orçamento é sempre calculado: soma de preço × quantidade dos itens.
+- A aprovação inicia a execução e dá baixa no estoque, numa única transação. Os marcos `started_at`, `completed_at` e `delivered_at` permitem medir o tempo de execução.
 
 ## Value objects
 

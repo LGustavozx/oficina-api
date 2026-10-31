@@ -98,47 +98,50 @@ const (
 	               WHERE id = $1 AND quantidade >= $2 RETURNING ` + partColumns
 )
 
+// RecordMovement roda numa transação própria ou participa da que vier no
+// contexto (ver database.RunInTx), como na aprovação de uma ordem de serviço.
 func (r *PartRepository) RecordMovement(ctx context.Context, m domain.StockMovement) (domain.Part, error) {
-	tx, err := r.db.BeginTx(ctx, nil)
+	var part domain.Part
+
+	err := database.RunInTx(ctx, r.db, func(ctx context.Context) error {
+		conn := database.Conn(ctx, r.db)
+
+		query := stockInSQL
+		if m.Type == domain.MovementOut {
+			query = stockOutSQL
+		}
+
+		var err error
+		part, err = scanPart(conn.QueryRowContext(ctx, query, m.PartID, m.Quantity, m.CreatedAt))
+		if err != nil {
+			return r.explainStockFailure(ctx, conn, m, err)
+		}
+
+		_, err = conn.ExecContext(ctx,
+			`INSERT INTO movimentacoes_estoque (id, peca_id, tipo, quantidade, motivo, criado_em)
+			 VALUES ($1, $2, $3, $4, $5, $6)`,
+			m.ID, m.PartID, movementTypeToDB(m.Type), m.Quantity, m.Reason, m.CreatedAt)
+		if err != nil {
+			return fmt.Errorf("inventory: gravar movimentação: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return domain.Part{}, fmt.Errorf("inventory: iniciar transação: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	query := stockInSQL
-	if m.Type == domain.MovementOut {
-		query = stockOutSQL
-	}
-
-	part, err := scanPart(tx.QueryRowContext(ctx, query, m.PartID, m.Quantity, m.CreatedAt))
-	if err != nil {
-		return domain.Part{}, r.explainStockFailure(ctx, tx, m, err)
-	}
-
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO movimentacoes_estoque (id, peca_id, tipo, quantidade, motivo, criado_em)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		m.ID, m.PartID, movementTypeToDB(m.Type), m.Quantity, m.Reason, m.CreatedAt)
-	if err != nil {
-		return domain.Part{}, fmt.Errorf("inventory: gravar movimentação: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return domain.Part{}, fmt.Errorf("inventory: confirmar movimentação: %w", err)
+		return domain.Part{}, err
 	}
 	return part, nil
 }
 
 // explainStockFailure traduz a falha do UPDATE. Numa saída, "nenhuma linha"
 // pode ser peça inexistente ou saldo insuficiente; uma consulta decide qual.
-func (r *PartRepository) explainStockFailure(ctx context.Context, tx *sql.Tx, m domain.StockMovement, err error) error {
+func (r *PartRepository) explainStockFailure(ctx context.Context, conn database.DBTX, m domain.StockMovement, err error) error {
 	if database.IsCheckViolation(err) {
 		return apperr.Conflict(domain.CodeStockLimitExceeded, fmt.Sprintf("o saldo não pode passar de %d unidades", domain.MaxStock))
 	}
 
 	if appErr, ok := apperr.As(err); ok && appErr.Code == domain.CodePartNotFound && m.Type == domain.MovementOut {
 		var exists bool
-		if qerr := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM pecas WHERE id = $1)`, m.PartID).Scan(&exists); qerr != nil {
+		if qerr := conn.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM pecas WHERE id = $1)`, m.PartID).Scan(&exists); qerr != nil {
 			return fmt.Errorf("inventory: conferir peça: %w", qerr)
 		}
 		if exists {

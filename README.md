@@ -2,7 +2,7 @@
 
 API REST de uma oficina mecânica: ordens de serviço, clientes, veículos, serviços e estoque de peças. Feita em Go, com PostgreSQL, para o Tech Challenge (Fase 1) da pós-graduação.
 
-O projeto está em construção. Já existem a base (config, banco, migrations, health check), os value objects do domínio (CPF/CNPJ, placa, dinheiro), o login com JWT, os cadastros (clientes, veículos, serviços e peças com estoque) e o CI. A próxima etapa é a ordem de serviço.
+O projeto está em construção. Já existem a base (config, banco, migrations, health check), os value objects do domínio (CPF/CNPJ, placa, dinheiro), o login com JWT, os cadastros (clientes, veículos, serviços e peças com estoque), a ordem de serviço com orçamento e o CI. As próximas etapas são a consulta pública do cliente, o tempo médio de execução e a documentação Swagger.
 
 ## Rodando
 
@@ -68,6 +68,31 @@ Peças ficam em `/admin/parts` (mesmas 5 rotas, com busca por `?sku=`). O cadast
 
 Uma saída maior que o saldo é recusada com `409 INSUFFICIENT_STOCK`, mesmo com várias requisições simultâneas. O saldo máximo por peça é 1.000.000. Uma peça com histórico de movimentações não pode ser apagada.
 
+### Ordem de serviço
+
+```bash
+# abrir a OS: o cliente é deduzido do veículo; serviços e peças são opcionais
+POST /admin/work-orders
+{"vehicle_id": "<id>", "description": "Barulho no motor",
+ "services": ["<id do serviço>"], "parts": [{"part_id": "<id>", "quantity": 2}]}
+```
+
+O orçamento é calculado sozinho: `total_cents` é a soma de preço × quantidade dos itens, e cada item guarda o preço do momento (reajustar o catálogo depois não altera uma OS existente). A OS nasce `RECEIVED` e avança por ações explícitas:
+
+| Ação | De | Para |
+|---|---|---|
+| `POST /admin/work-orders/{id}/start-diagnosis` | `RECEIVED` | `IN_DIAGNOSIS` |
+| `PUT  /admin/work-orders/{id}/items` | `RECEIVED` ou `IN_DIAGNOSIS` | troca os serviços e peças |
+| `POST /admin/work-orders/{id}/send-quote` | `IN_DIAGNOSIS` | `AWAITING_APPROVAL` (exige ao menos um item) |
+| `POST /admin/work-orders/{id}/approve` | `AWAITING_APPROVAL` | `IN_EXECUTION` |
+| `POST /admin/work-orders/{id}/reject` | `AWAITING_APPROVAL` | `CANCELLED` |
+| `POST /admin/work-orders/{id}/complete` | `IN_EXECUTION` | `COMPLETED` |
+| `POST /admin/work-orders/{id}/deliver` | `COMPLETED` | `DELIVERED` |
+
+Uma ação fora do status certo devolve `409 INVALID_STATUS_TRANSITION`. Também há `GET /admin/work-orders` (lista, com `?status=` e paginação) e `GET /admin/work-orders/{id}`.
+
+**Estoque:** a baixa das peças acontece na aprovação, na mesma transação que muda o status. Se qualquer peça não tiver saldo, a aprovação inteira é recusada (`409 INSUFFICIENT_STOCK`) e nada muda. Recusar o orçamento não mexe no estoque. Clientes, veículos, serviços e peças usados em uma OS não podem ser apagados.
+
 Na lista de veículos, `?plate=` faz a busca exata e `?customer_id=` (veículos de um cliente). A placa pode ser no formato antigo ou Mercosul. Um cliente que tem veículos não pode ser apagado (`409 CUSTOMER_IN_USE`).
 
 Erros seguem o formato `{"code":"INVALID_CREDENTIALS","message":"..."}`.
@@ -117,6 +142,8 @@ internal/identity/    login e autenticação
 internal/registry/    cadastros: clientes e veículos
 internal/catalog/     catálogo de serviços
 internal/inventory/   peças e controle de estoque
+internal/workorder/   ordem de serviço, orçamento e status
+internal/app/         montagem: liga os contextos entre si
 docs/                 decisões e documentação
 ```
 

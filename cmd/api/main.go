@@ -10,23 +10,10 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
-
-	catalogapp "oficina-api/internal/catalog/application"
-	cataloghttp "oficina-api/internal/catalog/http"
-	cataloginfra "oficina-api/internal/catalog/infrastructure"
-	identityapp "oficina-api/internal/identity/application"
-	identityhttp "oficina-api/internal/identity/http"
-	identityinfra "oficina-api/internal/identity/infrastructure"
-	inventoryapp "oficina-api/internal/inventory/application"
-	inventoryhttp "oficina-api/internal/inventory/http"
-	inventoryinfra "oficina-api/internal/inventory/infrastructure"
+	"oficina-api/internal/app"
 	"oficina-api/internal/platform/config"
 	"oficina-api/internal/platform/database"
 	"oficina-api/internal/platform/httpserver"
-	registryapp "oficina-api/internal/registry/application"
-	registryhttp "oficina-api/internal/registry/http"
-	registryinfra "oficina-api/internal/registry/infrastructure"
 	"oficina-api/internal/shared/clock"
 )
 
@@ -64,48 +51,10 @@ func run(logger *slog.Logger) error {
 	}
 	logger.Info("migrations aplicadas")
 
-	clk := clock.System{}
-	auth, err := identityapp.NewAuthService(
-		identityinfra.NewUserRepository(db),
-		identityinfra.NewBcryptHasher(bcrypt.DefaultCost),
-		identityinfra.NewJWTManager(cfg.JWTSecret, cfg.JWTTTL, clk),
-		clk,
-	)
+	handler, err := app.NewHandler(ctx, db, cfg, logger, clock.System{})
 	if err != nil {
 		return err
 	}
-
-	if cfg.AdminEmail != "" {
-		created, err := auth.EnsureAdmin(ctx, cfg.AdminEmail, cfg.AdminPassword)
-		if err != nil {
-			return err
-		}
-		if created {
-			logger.Info("administrador inicial criado", "email", cfg.AdminEmail)
-		}
-	}
-
-	identityHandler := identityhttp.NewHandler(auth, logger)
-
-	customers := registryapp.NewCustomerService(registryinfra.NewCustomerRepository(db), clk)
-	customerHandler := registryhttp.NewCustomerHandler(customers, logger)
-
-	vehicles := registryapp.NewVehicleService(registryinfra.NewVehicleRepository(db), clk)
-	vehicleHandler := registryhttp.NewVehicleHandler(vehicles, logger)
-
-	catalog := catalogapp.NewServiceCatalog(cataloginfra.NewServiceRepository(db), clk)
-	serviceHandler := cataloghttp.NewServiceHandler(catalog, logger)
-
-	inventory := inventoryapp.NewInventoryService(inventoryinfra.NewPartRepository(db), clk)
-	partHandler := inventoryhttp.NewPartHandler(inventory, logger)
-
-	handler := httpserver.NewHandler(db, logger,
-		identityHandler.Register,
-		func(mux *http.ServeMux) { customerHandler.Register(mux, identityHandler.RequireAuth) },
-		func(mux *http.ServeMux) { vehicleHandler.Register(mux, identityHandler.RequireAuth) },
-		func(mux *http.ServeMux) { serviceHandler.Register(mux, identityHandler.RequireAuth) },
-		func(mux *http.ServeMux) { partHandler.Register(mux, identityHandler.RequireAuth) },
-	)
 	server := httpserver.New(cfg.HTTPPort, handler)
 
 	serverErr := make(chan error, 1)
