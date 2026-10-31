@@ -1,14 +1,11 @@
 version: "2"
 
 linters:
-  # Além do conjunto padrão (errcheck, govet, staticcheck, unused...),
-  # ligamos linters que pegam erros comuns de segurança e de uso de erros.
   enable:
     - gosec
     - errorlint
     - bodyclose
-  # misspell não entra: ele verifica ortografia em inglês e dá falso positivo
-  # nos nossos comentários em português.
+  # misspell fica de fora: verifica inglês e erra nos comentários em português.
 
 formatters:
   enable:

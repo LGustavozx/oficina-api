@@ -5,5 +5,6 @@ API REST (monolito em Go) para uma oficina mecânica: ordens de serviço, client
 | Documento | Conteúdo |
 |---|---|
 | [02-banco-de-dados.md](02-banco-de-dados.md) | Justificativa da escolha do PostgreSQL |
+| [03-ddd.md](03-ddd.md) | Linguagem ubíqua e value objects |
 
 Os demais documentos (requisitos, DDD, arquitetura, API) serão adicionados a cada fase.
