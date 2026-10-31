@@ -18,6 +18,9 @@ import (
 	"oficina-api/internal/platform/config"
 	"oficina-api/internal/platform/database"
 	"oficina-api/internal/platform/httpserver"
+	registryapp "oficina-api/internal/registry/application"
+	registryhttp "oficina-api/internal/registry/http"
+	registryinfra "oficina-api/internal/registry/infrastructure"
 	"oficina-api/internal/shared/clock"
 )
 
@@ -77,7 +80,15 @@ func run(logger *slog.Logger) error {
 	}
 
 	identityHandler := identityhttp.NewHandler(auth, logger)
-	server := httpserver.New(cfg.HTTPPort, httpserver.NewHandler(db, logger, identityHandler.Register))
+
+	customers := registryapp.NewCustomerService(registryinfra.NewCustomerRepository(db), clk)
+	customerHandler := registryhttp.NewCustomerHandler(customers, logger)
+
+	handler := httpserver.NewHandler(db, logger,
+		identityHandler.Register,
+		func(mux *http.ServeMux) { customerHandler.Register(mux, identityHandler.RequireAuth) },
+	)
+	server := httpserver.New(cfg.HTTPPort, handler)
 
 	serverErr := make(chan error, 1)
 	go func() {

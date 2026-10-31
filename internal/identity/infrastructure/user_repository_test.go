@@ -3,37 +3,15 @@ package infrastructure
 import (
 	"context"
 	"database/sql"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
 	"oficina-api/internal/identity/domain"
-	"oficina-api/internal/platform/database"
+	"oficina-api/internal/platform/testdb"
 	"oficina-api/internal/shared/apperr"
 )
-
-// Teste de integração: exige um Postgres acessível em TEST_DATABASE_URL.
-func openTestDB(t *testing.T) *sql.DB {
-	t.Helper()
-
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		t.Skip("TEST_DATABASE_URL não definida; pulando teste de integração")
-	}
-
-	ctx := context.Background()
-	db, err := database.Open(ctx, url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := database.Migrate(ctx, db); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	return db
-}
 
 func newTestUser(t *testing.T, db *sql.DB) domain.User {
 	t.Helper()
@@ -53,7 +31,7 @@ func newTestUser(t *testing.T, db *sql.DB) domain.User {
 }
 
 func TestUserRepositoryCreateAndFind(t *testing.T) {
-	db := openTestDB(t)
+	db := testdb.Open(t)
 	repo := NewUserRepository(db)
 	ctx := context.Background()
 	user := newTestUser(t, db)
@@ -79,7 +57,7 @@ func TestUserRepositoryCreateAndFind(t *testing.T) {
 }
 
 func TestUserRepositoryDuplicateEmail(t *testing.T) {
-	db := openTestDB(t)
+	db := testdb.Open(t)
 	repo := NewUserRepository(db)
 	ctx := context.Background()
 	user := newTestUser(t, db)
@@ -99,7 +77,7 @@ func TestUserRepositoryDuplicateEmail(t *testing.T) {
 }
 
 func TestUserRepositoryNotFound(t *testing.T) {
-	db := openTestDB(t)
+	db := testdb.Open(t)
 	repo := NewUserRepository(db)
 	ctx := context.Background()
 	email, _ := domain.NewEmail("nao-existe-" + uuid.NewString() + "@oficina.com")
@@ -116,7 +94,7 @@ func TestUserRepositoryNotFound(t *testing.T) {
 }
 
 func TestUserRepositoryCount(t *testing.T) {
-	db := openTestDB(t)
+	db := testdb.Open(t)
 	repo := NewUserRepository(db)
 	ctx := context.Background()
 

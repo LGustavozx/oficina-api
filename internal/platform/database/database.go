@@ -10,6 +10,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+	"github.com/pressly/goose/v3/lock"
 )
 
 //go:embed migrations/*.sql
@@ -36,7 +37,14 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("database: localizar migrations: %w", err)
 	}
 
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, sub)
+	// O lock evita que duas instâncias (ou testes em paralelo) apliquem as
+	// migrations ao mesmo tempo.
+	locker, err := lock.NewPostgresSessionLocker()
+	if err != nil {
+		return fmt.Errorf("database: criar lock de migrations: %w", err)
+	}
+
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, sub, goose.WithSessionLocker(locker))
 	if err != nil {
 		return fmt.Errorf("database: criar provider de migrations: %w", err)
 	}

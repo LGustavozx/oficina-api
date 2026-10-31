@@ -2,7 +2,7 @@
 
 API REST de uma oficina mecânica: ordens de serviço, clientes, veículos, serviços e estoque de peças. Feita em Go, com PostgreSQL, para o Tech Challenge (Fase 1) da pós-graduação.
 
-O projeto está em construção. Já existem a base (config, banco, migrations, health check), os value objects do domínio (CPF/CNPJ, placa, dinheiro), o login com JWT e o CI. As próximas etapas são cadastros, estoque e ordem de serviço.
+O projeto está em construção. Já existem a base (config, banco, migrations, health check), os value objects do domínio (CPF/CNPJ, placa, dinheiro), o login com JWT, o cadastro de clientes e o CI. As próximas etapas são veículos, serviços, estoque e ordem de serviço.
 
 ## Rodando
 
@@ -33,6 +33,13 @@ curl localhost:8080/admin/me -H "Authorization: Bearer <token>"
 | `GET /health` | público | estado da API e do banco |
 | `POST /auth/login` | público | `{"email","password"}` → `{"token","expires_at"}` |
 | `GET /admin/me` | JWT | dados do usuário autenticado |
+| `POST /admin/customers` | JWT | cria cliente (`name`, `document`, `email`, `phone`) |
+| `GET /admin/customers` | JWT | lista paginada (`?limit=&offset=`) ou busca por `?document=` |
+| `GET /admin/customers/{id}` | JWT | detalhe |
+| `PUT /admin/customers/{id}` | JWT | substitui os dados |
+| `DELETE /admin/customers/{id}` | JWT | remove |
+
+`document` aceita CPF ou CNPJ, com ou sem pontuação. `email` e `phone` são opcionais.
 
 Erros seguem o formato `{"code":"INVALID_CREDENTIALS","message":"..."}`.
 
@@ -77,7 +84,7 @@ cmd/api/              ponto de entrada
 internal/platform/    config, banco e servidor HTTP
 internal/shared/      erros, dinheiro e relógio, usados por todos os contextos
 internal/identity/    login e autenticação
-internal/registry/    cadastros (CPF/CNPJ e placa por enquanto)
+internal/registry/    cadastros: clientes (veículos em seguida)
 docs/                 decisões e documentação
 ```
 
