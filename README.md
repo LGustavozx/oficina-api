@@ -2,7 +2,7 @@
 
 API REST de uma oficina mecânica: ordens de serviço, clientes, veículos, serviços e estoque de peças. Feita em Go, com PostgreSQL, para o Tech Challenge (Fase 1) da pós-graduação.
 
-O projeto está em construção. Já existem a base (config, banco, migrations, health check), os value objects do domínio (CPF/CNPJ, placa, dinheiro), o login com JWT, os cadastros (clientes, veículos, serviços e peças com estoque), a ordem de serviço com orçamento e o CI. As próximas etapas são a consulta pública do cliente, o tempo médio de execução e a documentação Swagger.
+O projeto está em construção. Já existem a base (config, banco, migrations, health check), os value objects do domínio (CPF/CNPJ, placa, dinheiro), o login com JWT, os cadastros (clientes, veículos, serviços e peças com estoque), a ordem de serviço com orçamento, o acompanhamento pelo cliente, o tempo médio de execução e o CI. A próxima etapa é a documentação Swagger.
 
 ## Rodando
 
@@ -92,6 +92,33 @@ O orçamento é calculado sozinho: `total_cents` é a soma de preço × quantida
 Uma ação fora do status certo devolve `409 INVALID_STATUS_TRANSITION`. Também há `GET /admin/work-orders` (lista, com `?status=` e paginação) e `GET /admin/work-orders/{id}`.
 
 **Estoque:** a baixa das peças acontece na aprovação, na mesma transação que muda o status. Se qualquer peça não tiver saldo, a aprovação inteira é recusada (`409 INSUFFICIENT_STOCK`) e nada muda. Recusar o orçamento não mexe no estoque. Clientes, veículos, serviços e peças usados em uma OS não podem ser apagados.
+
+### Acompanhamento pelo cliente (sem login)
+
+O cliente se identifica pelo **número da OS** e pelo **próprio CPF/CNPJ**, enviado no cabeçalho `X-Customer-Document` (no cabeçalho, e não na URL, para não ficar em históricos e logs):
+
+```bash
+curl localhost:8080/public/work-orders/100 -H "X-Customer-Document: 529.982.247-25"
+curl -X POST localhost:8080/public/work-orders/100/approve -H "X-Customer-Document: 52998224725"
+```
+
+| Rota | |
+|---|---|
+| `GET /public/work-orders/{número}` | status, descrição, itens, total e datas |
+| `POST /public/work-orders/{número}/approve` | aprova o orçamento (mesmas regras e mesma baixa de estoque da API administrativa) |
+| `POST /public/work-orders/{número}/reject` | recusa o orçamento |
+
+A resposta traz só o que o cliente precisa: nenhum identificador interno. OS inexistente, documento errado, documento inválido e OS de outro cliente dão **a mesma resposta `404`**, para ninguém descobrir quais ordens existem.
+
+### Tempo médio de execução
+
+`GET /admin/metrics/execution-time` (JWT) devolve `{"completed_orders": 12, "average_execution_minutes": 93.3}`. O tempo é medido da aprovação à finalização. O parâmetro opcional `?from=AAAA-MM-DD&to=AAAA-MM-DD` filtra pela data de finalização (`from` incluso, `to` exclusivo).
+
+### Limitações conhecidas
+
+- Não há limite de tentativas (*rate limiting*) nas rotas públicas nem no login; em produção isso ficaria no proxy ou no gateway.
+- Os tokens JWT não podem ser revogados antes de expirar.
+- Não há envio real de notificação ao cliente: "enviar o orçamento" só muda o status, e o cliente consulta pela API.
 
 Na lista de veículos, `?plate=` faz a busca exata e `?customer_id=` (veículos de um cliente). A placa pode ser no formato antigo ou Mercosul. Um cliente que tem veículos não pode ser apagado (`409 CUSTOMER_IN_USE`).
 

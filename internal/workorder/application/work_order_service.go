@@ -40,6 +40,12 @@ type StockConsumer interface {
 	Consume(ctx context.Context, partID uuid.UUID, quantity int, reason string) error
 }
 
+type CustomerDirectory interface {
+	// CustomerIDByDocument devolve o cliente dono do CPF/CNPJ. Documento
+	// inválido ou não cadastrado vira um erro (validation ou not_found).
+	CustomerIDByDocument(ctx context.Context, rawDocument string) (uuid.UUID, error)
+}
+
 type Transactor interface {
 	Run(ctx context.Context, fn func(ctx context.Context) error) error
 }
@@ -55,16 +61,17 @@ type ItemsInput struct {
 }
 
 type WorkOrderService struct {
-	repo     domain.Repository
-	tx       Transactor
-	vehicles VehicleDirectory
-	catalog  ItemCatalog
-	stock    StockConsumer
-	clock    clock.Clock
+	repo      domain.Repository
+	tx        Transactor
+	vehicles  VehicleDirectory
+	customers CustomerDirectory
+	catalog   ItemCatalog
+	stock     StockConsumer
+	clock     clock.Clock
 }
 
-func NewWorkOrderService(repo domain.Repository, tx Transactor, vehicles VehicleDirectory, catalog ItemCatalog, stock StockConsumer, clk clock.Clock) *WorkOrderService {
-	return &WorkOrderService{repo: repo, tx: tx, vehicles: vehicles, catalog: catalog, stock: stock, clock: clk}
+func NewWorkOrderService(repo domain.Repository, tx Transactor, vehicles VehicleDirectory, customers CustomerDirectory, catalog ItemCatalog, stock StockConsumer, clk clock.Clock) *WorkOrderService {
+	return &WorkOrderService{repo: repo, tx: tx, vehicles: vehicles, customers: customers, catalog: catalog, stock: stock, clock: clk}
 }
 
 // Create abre a ordem de serviço como RECEIVED. O cliente é o dono do veículo.
@@ -88,6 +95,54 @@ func (s *WorkOrderService) Create(ctx context.Context, vehicleID uuid.UUID, desc
 
 func (s *WorkOrderService) Get(ctx context.Context, id uuid.UUID) (domain.WorkOrder, error) {
 	return s.repo.FindByID(ctx, id)
+}
+
+// As três operações abaixo são as do cliente: ele se identifica pelo número da
+// OS e pelo seu CPF/CNPJ. Qualquer falha de identificação (OS inexistente,
+// documento inválido, desconhecido ou de outro cliente) dá o mesmo erro, para
+// ninguém descobrir quais ordens de serviço existem.
+
+func (s *WorkOrderService) GetForCustomer(ctx context.Context, number int64, rawDocument string) (domain.WorkOrder, error) {
+	notFound := apperr.NotFound(domain.CodeWorkOrderNotFound, "ordem de serviço não encontrada")
+
+	customerID, err := s.customers.CustomerIDByDocument(ctx, rawDocument)
+	if appErr, ok := apperr.As(err); ok && (appErr.Kind == apperr.KindNotFound || appErr.Kind == apperr.KindValidation) {
+		return domain.WorkOrder{}, notFound
+	}
+	if err != nil {
+		return domain.WorkOrder{}, err
+	}
+
+	order, err := s.repo.FindByNumber(ctx, number)
+	if err != nil {
+		return domain.WorkOrder{}, err
+	}
+	if order.CustomerID != customerID {
+		return domain.WorkOrder{}, notFound
+	}
+	return order, nil
+}
+
+func (s *WorkOrderService) ApproveForCustomer(ctx context.Context, number int64, rawDocument string) (domain.WorkOrder, error) {
+	order, err := s.GetForCustomer(ctx, number, rawDocument)
+	if err != nil {
+		return domain.WorkOrder{}, err
+	}
+	return s.Approve(ctx, order.ID)
+}
+
+func (s *WorkOrderService) RejectForCustomer(ctx context.Context, number int64, rawDocument string) (domain.WorkOrder, error) {
+	order, err := s.GetForCustomer(ctx, number, rawDocument)
+	if err != nil {
+		return domain.WorkOrder{}, err
+	}
+	return s.Reject(ctx, order.ID)
+}
+
+// ExecutionStats mede as ordens finalizadas no intervalo [from, to); zero em um
+// dos lados deixa aquele lado sem limite.
+func (s *WorkOrderService) ExecutionStats(ctx context.Context, from, to time.Time) (domain.ExecutionStats, error) {
+	return s.repo.ExecutionStats(ctx, from, to)
 }
 
 // List filtra por status quando rawStatus não é vazio.

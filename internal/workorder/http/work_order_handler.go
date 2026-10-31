@@ -4,6 +4,7 @@ package http
 import (
 	"context"
 	"log/slog"
+	"math"
 	"net/http"
 	"time"
 
@@ -26,6 +27,7 @@ type workOrderService interface {
 	Reject(ctx context.Context, id uuid.UUID) (domain.WorkOrder, error)
 	Complete(ctx context.Context, id uuid.UUID) (domain.WorkOrder, error)
 	Deliver(ctx context.Context, id uuid.UUID) (domain.WorkOrder, error)
+	ExecutionStats(ctx context.Context, from, to time.Time) (domain.ExecutionStats, error)
 }
 
 type Handler struct {
@@ -53,6 +55,58 @@ func (h *Handler) Register(mux *http.ServeMux, protect func(http.Handler) http.H
 	route("POST /admin/work-orders/{id}/reject", h.action(h.svc.Reject))
 	route("POST /admin/work-orders/{id}/complete", h.action(h.svc.Complete))
 	route("POST /admin/work-orders/{id}/deliver", h.action(h.svc.Deliver))
+
+	route("GET /admin/metrics/execution-time", h.executionTime)
+}
+
+type executionTimeResponse struct {
+	CompletedOrders         int     `json:"completed_orders"`
+	AverageExecutionMinutes float64 `json:"average_execution_minutes"`
+}
+
+// executionTime aceita ?from= e ?to= (YYYY-MM-DD); o intervalo vale pela data de
+// finalização, com from incluso e to exclusivo. Sem eles, considera tudo.
+func (h *Handler) executionTime(w http.ResponseWriter, r *http.Request) {
+	from, err := parseDate(r, "from")
+	if err != nil {
+		httpserver.WriteError(w, h.logger, err)
+		return
+	}
+	to, err := parseDate(r, "to")
+	if err != nil {
+		httpserver.WriteError(w, h.logger, err)
+		return
+	}
+	if !from.IsZero() && !to.IsZero() && !from.Before(to) {
+		httpserver.WriteError(w, h.logger, apperr.Validation(codeInvalidPeriod, "from deve ser anterior a to"))
+		return
+	}
+
+	stats, err := h.svc.ExecutionStats(r.Context(), from, to)
+	if err != nil {
+		httpserver.WriteError(w, h.logger, err)
+		return
+	}
+
+	httpserver.WriteJSON(w, http.StatusOK, executionTimeResponse{
+		CompletedOrders:         stats.CompletedOrders,
+		AverageExecutionMinutes: math.Round(stats.AverageDuration.Minutes()*10) / 10,
+	})
+}
+
+const codeInvalidPeriod = "INVALID_PERIOD"
+
+func parseDate(r *http.Request, name string) (time.Time, error) {
+	raw := r.URL.Query().Get(name)
+	if raw == "" {
+		return time.Time{}, nil
+	}
+
+	date, err := time.Parse(time.DateOnly, raw)
+	if err != nil {
+		return time.Time{}, apperr.Validation(codeInvalidPeriod, name+" deve ter o formato AAAA-MM-DD")
+	}
+	return date, nil
 }
 
 type partRequest struct {

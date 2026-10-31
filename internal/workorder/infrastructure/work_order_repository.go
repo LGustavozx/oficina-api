@@ -94,17 +94,54 @@ func insertItems(ctx context.Context, conn database.DBTX, o domain.WorkOrder) er
 }
 
 func (r *WorkOrderRepository) FindByID(ctx context.Context, id uuid.UUID) (domain.WorkOrder, error) {
-	order, err := scanOrder(r.db.QueryRowContext(ctx, `SELECT `+orderColumns+` FROM ordens_servico WHERE id = $1`, id))
+	return r.findOne(ctx, `id = $1`, id)
+}
+
+func (r *WorkOrderRepository) FindByNumber(ctx context.Context, number int64) (domain.WorkOrder, error) {
+	return r.findOne(ctx, `numero = $1`, number)
+}
+
+func (r *WorkOrderRepository) findOne(ctx context.Context, where string, arg any) (domain.WorkOrder, error) {
+	order, err := scanOrder(r.db.QueryRowContext(ctx, `SELECT `+orderColumns+` FROM ordens_servico WHERE `+where, arg))
 	if err != nil {
 		return domain.WorkOrder{}, err
 	}
 
-	itemsByOrder, err := r.loadItems(ctx, []uuid.UUID{id})
+	itemsByOrder, err := r.loadItems(ctx, []uuid.UUID{order.ID})
 	if err != nil {
 		return domain.WorkOrder{}, err
 	}
-	order.Items = itemsByOrder[id]
+	order.Items = itemsByOrder[order.ID]
 	return order, nil
+}
+
+// ExecutionStats calcula no banco, sem carregar as ordens para a memória.
+func (r *WorkOrderRepository) ExecutionStats(ctx context.Context, from, to time.Time) (domain.ExecutionStats, error) {
+	var (
+		stats   domain.ExecutionStats
+		seconds float64
+	)
+
+	err := r.db.QueryRowContext(ctx,
+		`SELECT count(*), COALESCE(EXTRACT(EPOCH FROM avg(finalizada_em - iniciada_em)), 0)::float8
+		 FROM ordens_servico
+		 WHERE iniciada_em IS NOT NULL AND finalizada_em IS NOT NULL
+		   AND ($1::timestamptz IS NULL OR finalizada_em >= $1)
+		   AND ($2::timestamptz IS NULL OR finalizada_em < $2)`,
+		nullIfZero(from), nullIfZero(to)).Scan(&stats.CompletedOrders, &seconds)
+	if err != nil {
+		return domain.ExecutionStats{}, fmt.Errorf("workorder: calcular tempo de execução: %w", err)
+	}
+
+	stats.AverageDuration = time.Duration(seconds * float64(time.Second))
+	return stats, nil
+}
+
+func nullIfZero(t time.Time) any {
+	if t.IsZero() {
+		return nil
+	}
+	return t.UTC()
 }
 
 // List devolve da mais recente para a mais antiga. Os itens de todas as
