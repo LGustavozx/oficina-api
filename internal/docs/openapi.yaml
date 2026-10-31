@@ -821,7 +821,8 @@ components:
     BadRequest:
       description: |
         Requisição inválida: corpo malformado ou com campo desconhecido
-        (`INVALID_REQUEST`), identificador inválido (`INVALID_ID`), paginação
+        (`INVALID_REQUEST`), corpo que não está em UTF-8 (`INVALID_ENCODING`),
+        identificador inválido (`INVALID_ID`), paginação
         inválida (`INVALID_PAGINATION`) ou dado que viola uma regra de
         validação (o `code` diz qual).
       content:

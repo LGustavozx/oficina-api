@@ -53,6 +53,50 @@ func TestDecodeJSON(t *testing.T) {
 	}
 }
 
+func TestDecodeJSONRejectsBodyThatIsNotUTF8(t *testing.T) {
+	type payload struct {
+		Name string `json:"name"`
+	}
+
+	// "Pe\xe7as" é "Peças" em Windows-1252: o byte 0xE7 sozinho não é UTF-8 válido.
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{\"name\":\"Pe\xe7as\"}"))
+	var got payload
+
+	err := DecodeJSON(httptest.NewRecorder(), req, &got)
+
+	appErr, ok := apperr.As(err)
+	if !ok || appErr.Code != CodeInvalidEncoding || appErr.Kind != apperr.KindValidation {
+		t.Fatalf("erro = %v, esperado %s", err, CodeInvalidEncoding)
+	}
+	if !strings.Contains(appErr.Message, "UTF-8") {
+		t.Errorf("a mensagem deveria citar UTF-8: %q", appErr.Message)
+	}
+	if got.Name != "" {
+		t.Errorf("nada deveria ser decodificado: %+v", got)
+	}
+}
+
+func TestDecodeJSONAcceptsValidUTF8WithAccents(t *testing.T) {
+	type payload struct {
+		Name string `json:"name"`
+	}
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"Troca de óleo ção"}`))
+	var got payload
+
+	if err := DecodeJSON(httptest.NewRecorder(), req, &got); err != nil || got.Name != "Troca de óleo ção" {
+		t.Errorf("got %+v, err %v", got, err)
+	}
+}
+
+func TestDecodeJSONRejectsOversizedBody(t *testing.T) {
+	huge := `{"name":"` + strings.Repeat("a", maxBodyBytes) + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(huge))
+
+	err := DecodeJSON(httptest.NewRecorder(), req, &struct{ Name string }{})
+
+	wantCode(t, err, CodeInvalidRequest)
+}
+
 func TestPathUUID(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 

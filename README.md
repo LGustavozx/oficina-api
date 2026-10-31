@@ -32,8 +32,8 @@ curl -X POST localhost:8080/auth/login \
 H="Authorization: Bearer <token>"
 curl -H "$H" -X POST localhost:8080/admin/customers -d '{"name":"Maria Souza","document":"529.982.247-25"}'
 curl -H "$H" -X POST localhost:8080/admin/vehicles  -d '{"customer_id":"<id>","plate":"ABC1D23","brand":"Fiat","model":"Uno","year":2010}'
-curl -H "$H" -X POST localhost:8080/admin/services  -d '{"name":"Troca de óleo","price_cents":12000,"estimated_minutes":45}'
-curl -H "$H" -X POST localhost:8080/admin/parts     -d '{"sku":"FLT-01","name":"Filtro de óleo","unit_price_cents":3590}'
+curl -H "$H" -X POST localhost:8080/admin/services  -d '{"name":"Troca de oleo","price_cents":12000,"estimated_minutes":45}'
+curl -H "$H" -X POST localhost:8080/admin/parts     -d '{"sku":"FLT-01","name":"Filtro de oleo","unit_price_cents":3590}'
 curl -H "$H" -X POST localhost:8080/admin/parts/<id>/stock-movements -d '{"type":"IN","quantity":10,"reason":"Compra"}'
 
 # 3. abrir a ordem de serviço: o cliente é o dono do veículo, o orçamento é calculado sozinho
@@ -47,6 +47,8 @@ curl -X POST localhost:8080/public/work-orders/<número>/approve -H "X-Customer-
 curl -H "$H" -X POST localhost:8080/admin/work-orders/<id>/complete
 curl -H "$H" -X POST localhost:8080/admin/work-orders/<id>/deliver
 ```
+
+> **Terminal ou Swagger?** Os comandos acima são de bash. No Windows (PowerShell ou cmd) as aspas dos JSON costumam dar problema, e alguns terminais enviam acentos fora de UTF-8; nesse caso a API responde `400 INVALID_ENCODING`. O caminho mais simples é usar o Swagger UI em `/docs` ("Try it out", clique em "Authorize" e cole o token), ou salvar o JSON em UTF-8 e enviar com `curl --data @arquivo.json`. Por isso os exemplos usam nomes sem acento.
 
 O status da OS segue `RECEIVED` → `IN_DIAGNOSIS` → `AWAITING_APPROVAL` → `IN_EXECUTION` → `COMPLETED` → `DELIVERED` (ou `CANCELLED`, se o orçamento for recusado). A baixa do estoque acontece na aprovação, na mesma transação que muda o status.
 
