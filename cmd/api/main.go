@@ -10,9 +10,15 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
+	identityapp "oficina-api/internal/identity/application"
+	identityhttp "oficina-api/internal/identity/http"
+	identityinfra "oficina-api/internal/identity/infrastructure"
 	"oficina-api/internal/platform/config"
 	"oficina-api/internal/platform/database"
 	"oficina-api/internal/platform/httpserver"
+	"oficina-api/internal/shared/clock"
 )
 
 func main() {
@@ -49,7 +55,29 @@ func run(logger *slog.Logger) error {
 	}
 	logger.Info("migrations aplicadas")
 
-	server := httpserver.New(cfg.HTTPPort, httpserver.NewHandler(db, logger))
+	clk := clock.System{}
+	auth, err := identityapp.NewAuthService(
+		identityinfra.NewUserRepository(db),
+		identityinfra.NewBcryptHasher(bcrypt.DefaultCost),
+		identityinfra.NewJWTManager(cfg.JWTSecret, cfg.JWTTTL, clk),
+		clk,
+	)
+	if err != nil {
+		return err
+	}
+
+	if cfg.AdminEmail != "" {
+		created, err := auth.EnsureAdmin(ctx, cfg.AdminEmail, cfg.AdminPassword)
+		if err != nil {
+			return err
+		}
+		if created {
+			logger.Info("administrador inicial criado", "email", cfg.AdminEmail)
+		}
+	}
+
+	identityHandler := identityhttp.NewHandler(auth, logger)
+	server := httpserver.New(cfg.HTTPPort, httpserver.NewHandler(db, logger, identityHandler.Register))
 
 	serverErr := make(chan error, 1)
 	go func() {

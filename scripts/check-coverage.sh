@@ -12,6 +12,10 @@ CRITICAL_PACKAGES=(
   oficina-api/internal/shared/money
   oficina-api/internal/shared/clock
   oficina-api/internal/registry/domain
+  oficina-api/internal/identity/domain
+  oficina-api/internal/identity/application
+  oficina-api/internal/identity/infrastructure
+  oficina-api/internal/identity/http
 )
 
 failed=0

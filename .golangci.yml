@@ -6,6 +6,12 @@ linters:
     - errorlint
     - bodyclose
   # misspell fica de fora: verifica inglês e erra nos comentários em português.
+  exclusions:
+    rules:
+      # Senhas de exemplo nos testes disparam G101 (credencial fixa).
+      - path: _test\.go
+        linters:
+          - gosec
 
 formatters:
   enable:
