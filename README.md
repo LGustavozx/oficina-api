@@ -2,7 +2,7 @@
 
 API REST de uma oficina mecânica: ordens de serviço, clientes, veículos, serviços e estoque de peças. Feita em Go, com PostgreSQL, para o Tech Challenge (Fase 1) da pós-graduação.
 
-O projeto está em construção. Já existem a base (config, banco, migrations, health check), os value objects do domínio (CPF/CNPJ, placa, dinheiro), o login com JWT, o cadastro de clientes e veículos e o CI. As próximas etapas são serviços, estoque e ordem de serviço.
+O projeto está em construção. Já existem a base (config, banco, migrations, health check), os value objects do domínio (CPF/CNPJ, placa, dinheiro), o login com JWT, o cadastro de clientes, veículos e serviços e o CI. As próximas etapas são estoque de peças e ordem de serviço.
 
 ## Rodando
 
@@ -47,7 +47,15 @@ Veículos seguem o mesmo formato em `/admin/vehicles` (POST, GET, GET `/{id}`, P
 {"customer_id": "<id do cliente>", "plate": "ABC-1D23", "brand": "Fiat", "model": "Uno", "year": 2010}
 ```
 
-A lista aceita `?plate=` (busca exata) e `?customer_id=` (veículos de um cliente). A placa pode ser no formato antigo ou Mercosul. Um cliente que tem veículos não pode ser apagado (`409 CUSTOMER_IN_USE`).
+Serviços do catálogo ficam em `/admin/services`, com as mesmas 5 rotas. O preço é enviado em **centavos**:
+
+```json
+{"name": "Troca de óleo", "description": "Óleo e filtro", "price_cents": 12000, "estimated_minutes": 45}
+```
+
+O nome do serviço é único (sem diferenciar maiúsculas). Preço e duração são obrigatórios e maiores que zero.
+
+Na lista de veículos, `?plate=` faz a busca exata e `?customer_id=` (veículos de um cliente). A placa pode ser no formato antigo ou Mercosul. Um cliente que tem veículos não pode ser apagado (`409 CUSTOMER_IN_USE`).
 
 Erros seguem o formato `{"code":"INVALID_CREDENTIALS","message":"..."}`.
 
@@ -70,7 +78,8 @@ go test ./...
 # inclui os testes de integração com o banco
 TEST_DATABASE_URL="postgres://oficina:oficina@localhost:5432/oficina?sslmode=disable" go test ./...
 
-bash scripts/check-coverage.sh   # confere o mínimo de 80% nos pacotes críticos
+TEST_DATABASE_URL="postgres://oficina:oficina@localhost:5432/oficina?sslmode=disable" \
+  bash scripts/check-coverage.sh   # mínimo de 80% nos pacotes críticos; precisa do banco
 ```
 
 Sem `TEST_DATABASE_URL`, os testes de integração são pulados. No CI eles rodam com um Postgres de verdade, junto com `golangci-lint`, `go vet`, `go test -race` e `govulncheck`.
@@ -93,6 +102,7 @@ internal/platform/    config, banco e servidor HTTP
 internal/shared/      erros, dinheiro e relógio, usados por todos os contextos
 internal/identity/    login e autenticação
 internal/registry/    cadastros: clientes e veículos
+internal/catalog/     catálogo de serviços
 docs/                 decisões e documentação
 ```
 

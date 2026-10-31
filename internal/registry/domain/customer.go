@@ -5,11 +5,11 @@ import (
 	"net/mail"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 
 	"oficina-api/internal/shared/apperr"
+	"oficina-api/internal/shared/text"
 )
 
 const (
@@ -55,9 +55,8 @@ func (c Customer) Update(data CustomerData, now time.Time) (Customer, error) {
 }
 
 func (c Customer) apply(data CustomerData, now time.Time) (Customer, error) {
-	name := strings.TrimSpace(data.Name)
-	// U+FFFD é o que o decoder de JSON coloca no lugar de bytes que não são UTF-8.
-	if n := utf8.RuneCountInString(name); n < minNameLength || n > maxNameLength || strings.ContainsRune(name, utf8.RuneError) {
+	name, ok := text.Clean(data.Name, minNameLength, maxNameLength)
+	if !ok {
 		return Customer{}, apperr.Validation(CodeInvalidName, "o nome deve ter entre 2 e 120 caracteres")
 	}
 

@@ -15,6 +15,12 @@ CRITICAL_PACKAGES=(
   oficina-api/internal/registry/application
   oficina-api/internal/registry/infrastructure
   oficina-api/internal/registry/http
+  oficina-api/internal/shared/text
+  oficina-api/internal/platform/database
+  oficina-api/internal/catalog/domain
+  oficina-api/internal/catalog/application
+  oficina-api/internal/catalog/infrastructure
+  oficina-api/internal/catalog/http
   oficina-api/internal/identity/domain
   oficina-api/internal/identity/application
   oficina-api/internal/identity/infrastructure

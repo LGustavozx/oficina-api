@@ -8,13 +8,11 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"oficina-api/internal/identity/domain"
+	"oficina-api/internal/platform/database"
 	"oficina-api/internal/shared/apperr"
 )
-
-const pgUniqueViolation = "23505"
 
 type UserRepository struct {
 	db *sql.DB
@@ -29,8 +27,7 @@ func (r *UserRepository) Create(ctx context.Context, user domain.User) error {
 		`INSERT INTO usuarios (id, email, senha_hash, criado_em) VALUES ($1, $2, $3, $4)`,
 		user.ID, user.Email.String(), user.PasswordHash, user.CreatedAt)
 
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation {
+	if database.IsUniqueViolation(err) {
 		return apperr.Conflict(domain.CodeEmailTaken, "e-mail já cadastrado")
 	}
 	if err != nil {

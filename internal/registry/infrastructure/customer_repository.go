@@ -8,18 +8,13 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 
+	"oficina-api/internal/platform/database"
 	"oficina-api/internal/registry/domain"
 	"oficina-api/internal/shared/apperr"
 )
 
-const (
-	pgUniqueViolation     = "23505"
-	pgForeignKeyViolation = "23503"
-
-	customerColumns = `id, nome, documento, email, telefone, criado_em, atualizado_em`
-)
+const customerColumns = `id, nome, documento, email, telefone, criado_em, atualizado_em`
 
 type CustomerRepository struct {
 	db *sql.DB
@@ -46,7 +41,7 @@ func (r *CustomerRepository) Update(ctx context.Context, c domain.Customer) erro
 	if err != nil {
 		return wrapWrite(err, "atualizar cliente")
 	}
-	return requireAffected(result, customerNotFound())
+	return database.RequireAffected(result, customerNotFound())
 }
 
 func (r *CustomerRepository) Delete(ctx context.Context, id uuid.UUID) error {
@@ -54,7 +49,7 @@ func (r *CustomerRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	if err != nil {
 		return wrapWrite(err, "apagar cliente")
 	}
-	return requireAffected(result, customerNotFound())
+	return database.RequireAffected(result, customerNotFound())
 }
 
 func (r *CustomerRepository) FindByID(ctx context.Context, id uuid.UUID) (domain.Customer, error) {
@@ -121,30 +116,14 @@ func customerNotFound() error {
 	return apperr.NotFound(domain.CodeCustomerNotFound, "cliente não encontrado")
 }
 
-func requireAffected(result sql.Result, notFound error) error {
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("registry: linhas afetadas: %w", err)
-	}
-	if affected == 0 {
-		return notFound
-	}
-	return nil
-}
-
 func wrapWrite(err error, action string) error {
-	if err == nil {
+	switch {
+	case err == nil:
 		return nil
-	}
-
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		switch pgErr.Code {
-		case pgUniqueViolation:
-			return apperr.Conflict(domain.CodeDocumentTaken, "documento já cadastrado")
-		case pgForeignKeyViolation:
-			return apperr.Conflict(domain.CodeCustomerInUse, "o cliente possui registros vinculados")
-		}
+	case database.IsUniqueViolation(err):
+		return apperr.Conflict(domain.CodeDocumentTaken, "documento já cadastrado")
+	case database.IsForeignKeyViolation(err):
+		return apperr.Conflict(domain.CodeCustomerInUse, "o cliente possui registros vinculados")
 	}
 	return fmt.Errorf("registry: %s: %w", action, err)
 }

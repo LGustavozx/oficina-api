@@ -12,6 +12,9 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	catalogapp "oficina-api/internal/catalog/application"
+	cataloghttp "oficina-api/internal/catalog/http"
+	cataloginfra "oficina-api/internal/catalog/infrastructure"
 	identityapp "oficina-api/internal/identity/application"
 	identityhttp "oficina-api/internal/identity/http"
 	identityinfra "oficina-api/internal/identity/infrastructure"
@@ -87,10 +90,14 @@ func run(logger *slog.Logger) error {
 	vehicles := registryapp.NewVehicleService(registryinfra.NewVehicleRepository(db), clk)
 	vehicleHandler := registryhttp.NewVehicleHandler(vehicles, logger)
 
+	catalog := catalogapp.NewServiceCatalog(cataloginfra.NewServiceRepository(db), clk)
+	serviceHandler := cataloghttp.NewServiceHandler(catalog, logger)
+
 	handler := httpserver.NewHandler(db, logger,
 		identityHandler.Register,
 		func(mux *http.ServeMux) { customerHandler.Register(mux, identityHandler.RequireAuth) },
 		func(mux *http.ServeMux) { vehicleHandler.Register(mux, identityHandler.RequireAuth) },
+		func(mux *http.ServeMux) { serviceHandler.Register(mux, identityHandler.RequireAuth) },
 	)
 	server := httpserver.New(cfg.HTTPPort, handler)
 
