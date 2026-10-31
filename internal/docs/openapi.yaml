@@ -1,0 +1,1231 @@
+openapi: 3.0.3
+
+info:
+  title: oficina-api
+  version: 1.0.0
+  description: |
+    API REST de uma oficina mecânica: clientes, veículos, serviços, peças com
+    controle de estoque e ordens de serviço com orçamento e acompanhamento.
+
+    **Autenticação.** As rotas `/admin/*` exigem um token JWT, obtido em
+    `POST /auth/login` e enviado em `Authorization: Bearer <token>`.
+    As rotas `/public/*` são do cliente e não usam JWT: ele se identifica pelo
+    número da ordem de serviço e pelo próprio CPF/CNPJ, no cabeçalho
+    `X-Customer-Document`.
+
+    **Erros.** Todo erro tem o formato `{"code": "...", "message": "..."}`. O
+    `code` é estável e pode ser usado por programas; a `message` é para pessoas.
+
+    **Valores em dinheiro** trafegam em **centavos**, como inteiros
+    (R$ 120,00 = `12000`).
+
+    **Listas** são paginadas com `limit` (padrão 50, máximo 200) e `offset`.
+
+servers:
+  - url: http://localhost:8080
+    description: Ambiente local (docker compose)
+
+tags:
+  - name: Sistema
+  - name: Autenticação
+  - name: Clientes
+  - name: Veículos
+  - name: Serviços
+  - name: Peças e estoque
+  - name: Ordens de serviço
+  - name: Acompanhamento pelo cliente
+  - name: Métricas
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [Sistema]
+      summary: Estado da API e do banco
+      security: []
+      responses:
+        "200":
+          description: A API e o banco estão no ar.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "503":
+          description: O banco de dados não responde.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+  /auth/login:
+    post:
+      tags: [Autenticação]
+      summary: Login do administrador
+      description: |
+        Devolve um token JWT. Senha errada e e-mail inexistente dão a mesma
+        resposta, para não revelar quais e-mails existem.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Login realizado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401":
+          description: "`INVALID_CREDENTIALS`: e-mail ou senha inválidos."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /admin/me:
+    get:
+      tags: [Autenticação]
+      summary: Dados do usuário autenticado
+      responses:
+        "200":
+          description: Usuário do token.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /admin/customers:
+    post:
+      tags: [Clientes]
+      summary: Cadastrar cliente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CustomerInput" }
+      responses:
+        "201":
+          description: Cliente criado. O cabeçalho `Location` aponta para o recurso.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: "`DOCUMENT_ALREADY_REGISTERED`: já existe cliente com esse CPF/CNPJ."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      tags: [Clientes]
+      summary: Listar clientes ou buscar por CPF/CNPJ
+      description: |
+        Com `document`, devolve uma lista com o cliente daquele CPF/CNPJ, ou uma
+        lista vazia se não houver cadastro. Sem ele, lista de forma paginada,
+        ordenada pelo nome.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+        - name: document
+          in: query
+          description: CPF ou CNPJ, com ou sem pontuação.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Lista de clientes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerList" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /admin/customers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Clientes]
+      summary: Detalhar cliente
+      responses:
+        "200":
+          description: Cliente.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Clientes]
+      summary: Substituir os dados do cliente
+      description: Substitui todos os campos; `email` e `phone` omitidos são apagados.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CustomerInput" }
+      responses:
+        "200":
+          description: Cliente atualizado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`DOCUMENT_ALREADY_REGISTERED`: outro cliente já usa esse CPF/CNPJ."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      tags: [Clientes]
+      summary: Apagar cliente
+      responses:
+        "204": { description: Cliente apagado. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`CUSTOMER_IN_USE`: o cliente tem veículos ou ordens de serviço."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /admin/vehicles:
+    post:
+      tags: [Veículos]
+      summary: Cadastrar veículo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VehicleInput" }
+      responses:
+        "201":
+          description: Veículo criado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vehicle" }
+        "400":
+          description: |
+            Dado inválido (`INVALID_PLATE`, `INVALID_BRAND`, `INVALID_MODEL`,
+            `INVALID_YEAR`, `INVALID_ID`) ou cliente inexistente
+            (`CUSTOMER_NOT_FOUND`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: "`PLATE_ALREADY_REGISTERED`: já existe veículo com essa placa."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      tags: [Veículos]
+      summary: Listar veículos
+      description: |
+        Com `plate`, busca exata (lista vazia se não houver). Com `customer_id`,
+        os veículos do cliente. Sem filtro, todos, ordenados pela placa.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+        - name: plate
+          in: query
+          description: Placa no formato antigo (ABC-1234) ou Mercosul (ABC1D23).
+          schema: { type: string }
+        - name: customer_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Lista de veículos.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VehicleList" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /admin/vehicles/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Veículos]
+      summary: Detalhar veículo
+      responses:
+        "200":
+          description: Veículo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vehicle" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Veículos]
+      summary: Substituir os dados do veículo
+      description: Também permite trocar o dono (`customer_id`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VehicleInput" }
+      responses:
+        "200":
+          description: Veículo atualizado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vehicle" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`PLATE_ALREADY_REGISTERED`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      tags: [Veículos]
+      summary: Apagar veículo
+      responses:
+        "204": { description: Veículo apagado. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`VEHICLE_IN_USE`: o veículo tem ordens de serviço."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /admin/services:
+    post:
+      tags: [Serviços]
+      summary: Cadastrar serviço no catálogo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ServiceInput" }
+      responses:
+        "201":
+          description: Serviço criado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Service" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: "`SERVICE_NAME_ALREADY_REGISTERED`: o nome é único, sem diferenciar maiúsculas."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      tags: [Serviços]
+      summary: Listar serviços
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Lista de serviços, ordenada pelo nome.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServiceList" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /admin/services/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Serviços]
+      summary: Detalhar serviço
+      responses:
+        "200":
+          description: Serviço.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Service" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Serviços]
+      summary: Substituir os dados do serviço
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ServiceInput" }
+      responses:
+        "200":
+          description: Serviço atualizado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Service" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`SERVICE_NAME_ALREADY_REGISTERED`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      tags: [Serviços]
+      summary: Apagar serviço
+      responses:
+        "204": { description: Serviço apagado. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`SERVICE_IN_USE`: o serviço está em alguma ordem de serviço."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /admin/parts:
+    post:
+      tags: [Peças e estoque]
+      summary: Cadastrar peça ou insumo
+      description: |
+        A peça nasce com estoque zero. O saldo só muda por movimentação
+        (`POST /admin/parts/{id}/stock-movements`); enviar `stock_quantity` aqui
+        é recusado.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PartInput" }
+      responses:
+        "201":
+          description: Peça criada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Part" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: "`SKU_ALREADY_REGISTERED`: já existe peça com esse código."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      tags: [Peças e estoque]
+      summary: Listar peças ou buscar por código
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+        - name: sku
+          in: query
+          description: Código da peça (sem diferenciar maiúsculas). Devolve lista vazia se não houver.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Lista de peças, ordenada pelo nome.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PartList" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /admin/parts/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Peças e estoque]
+      summary: Detalhar peça (inclui o saldo atual)
+      responses:
+        "200":
+          description: Peça.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Part" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Peças e estoque]
+      summary: Substituir os dados cadastrais da peça
+      description: Nunca altera o saldo do estoque.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PartInput" }
+      responses:
+        "200":
+          description: Peça atualizada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Part" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`SKU_ALREADY_REGISTERED`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      tags: [Peças e estoque]
+      summary: Apagar peça
+      responses:
+        "204": { description: Peça apagada. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`PART_IN_USE`: a peça tem movimentações de estoque ou está em uma ordem de serviço."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /admin/parts/{id}/stock-movements:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Peças e estoque]
+      summary: Registrar entrada ou saída de estoque
+      description: |
+        A saída é atômica: se o saldo não bastar, nada muda e a resposta é
+        `409 INSUFFICIENT_STOCK`, mesmo com várias requisições simultâneas.
+        O saldo máximo de uma peça é 1.000.000 (`STOCK_LIMIT_EXCEEDED`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StockMovementInput" }
+      responses:
+        "201":
+          description: Movimentação registrada, com o saldo resultante.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockMovementResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`INSUFFICIENT_STOCK` ou `STOCK_LIMIT_EXCEEDED`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      tags: [Peças e estoque]
+      summary: Histórico de movimentações da peça
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Movimentações, da mais recente para a mais antiga.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockMovementList" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/work-orders:
+    post:
+      tags: [Ordens de serviço]
+      summary: Abrir ordem de serviço
+      description: |
+        A OS nasce `RECEIVED`. O cliente é o dono do veículo informado. Serviços
+        e peças são opcionais agora e podem ser trocados antes do envio do
+        orçamento. O orçamento (`total_cents`) é calculado automaticamente.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateWorkOrderRequest" }
+      responses:
+        "201":
+          description: Ordem de serviço criada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkOrder" }
+        "400":
+          description: |
+            Dado inválido (`INVALID_DESCRIPTION`, `INVALID_ITEMS`, `INVALID_ID`) ou
+            item inexistente (`VEHICLE_NOT_FOUND`, `SERVICE_NOT_FOUND`,
+            `PART_NOT_FOUND`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    get:
+      tags: [Ordens de serviço]
+      summary: Listar ordens de serviço
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/WorkOrderStatus" }
+      responses:
+        "200":
+          description: Lista, da mais recente para a mais antiga.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkOrderList" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /admin/work-orders/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Ordens de serviço]
+      summary: Detalhar ordem de serviço
+      responses:
+        "200":
+          description: Ordem de serviço com itens e orçamento.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkOrder" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/work-orders/{id}/items:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      tags: [Ordens de serviço]
+      summary: Trocar os serviços e peças
+      description: |
+        Substitui todos os itens. Só é possível nos status `RECEIVED` e
+        `IN_DIAGNOSIS`. Cada item guarda o preço do momento.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReplaceItemsRequest" }
+      responses:
+        "200":
+          description: Ordem de serviço atualizada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkOrder" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/InvalidTransition" }
+
+  /admin/work-orders/{id}/start-diagnosis:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Ordens de serviço]
+      summary: Iniciar o diagnóstico
+      description: "`RECEIVED` → `IN_DIAGNOSIS`."
+      responses:
+        "200": { $ref: "#/components/responses/WorkOrder" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/InvalidTransition" }
+
+  /admin/work-orders/{id}/send-quote:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Ordens de serviço]
+      summary: Enviar o orçamento para aprovação do cliente
+      description: |
+        `IN_DIAGNOSIS` → `AWAITING_APPROVAL`. Exige ao menos um item
+        (`400 QUOTE_WITHOUT_ITEMS`).
+      responses:
+        "200": { $ref: "#/components/responses/WorkOrder" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/InvalidTransition" }
+
+  /admin/work-orders/{id}/approve:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Ordens de serviço]
+      summary: Aprovar o orçamento
+      description: |
+        `AWAITING_APPROVAL` → `IN_EXECUTION`. Dá baixa no estoque das peças, na
+        mesma transação. Se qualquer peça não tiver saldo, nada muda e a
+        resposta é `409 INSUFFICIENT_STOCK`.
+      responses:
+        "200": { $ref: "#/components/responses/WorkOrder" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ApprovalConflict" }
+
+  /admin/work-orders/{id}/reject:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Ordens de serviço]
+      summary: Recusar o orçamento
+      description: "`AWAITING_APPROVAL` → `CANCELLED`. Não mexe no estoque."
+      responses:
+        "200": { $ref: "#/components/responses/WorkOrder" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/InvalidTransition" }
+
+  /admin/work-orders/{id}/complete:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Ordens de serviço]
+      summary: Finalizar o serviço
+      description: "`IN_EXECUTION` → `COMPLETED`."
+      responses:
+        "200": { $ref: "#/components/responses/WorkOrder" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/InvalidTransition" }
+
+  /admin/work-orders/{id}/deliver:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Ordens de serviço]
+      summary: Entregar o veículo
+      description: "`COMPLETED` → `DELIVERED`."
+      responses:
+        "200": { $ref: "#/components/responses/WorkOrder" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/InvalidTransition" }
+
+  /admin/metrics/execution-time:
+    get:
+      tags: [Métricas]
+      summary: Tempo médio de execução
+      description: |
+        Média do tempo entre a aprovação e a finalização das ordens de serviço
+        finalizadas. O período filtra pela data de finalização: `from` é
+        incluso e `to` é exclusivo.
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date, example: "2026-01-01" }
+        - name: to
+          in: query
+          schema: { type: string, format: date, example: "2026-02-01" }
+      responses:
+        "200":
+          description: Estatística do período.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecutionTime" }
+        "400":
+          description: "`INVALID_PERIOD`: data fora do formato AAAA-MM-DD, ou `from` não anterior a `to`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /public/work-orders/{number}:
+    parameters:
+      - $ref: "#/components/parameters/Number"
+    get:
+      tags: [Acompanhamento pelo cliente]
+      summary: Consultar a ordem de serviço
+      description: |
+        Sem login: o cliente se identifica pelo número da OS e pelo próprio
+        CPF/CNPJ (cabeçalho `X-Customer-Document`). OS inexistente, documento
+        errado, documento inválido e OS de outro cliente dão **a mesma resposta
+        `404`**, para não revelar quais ordens existem.
+      security:
+        - customerDocument: []
+      responses:
+        "200": { $ref: "#/components/responses/PublicWorkOrder" }
+        "400": { $ref: "#/components/responses/PublicBadRequest" }
+        "404": { $ref: "#/components/responses/PublicNotFound" }
+
+  /public/work-orders/{number}/approve:
+    parameters:
+      - $ref: "#/components/parameters/Number"
+    post:
+      tags: [Acompanhamento pelo cliente]
+      summary: Aprovar o orçamento (pelo cliente)
+      description: |
+        Mesmas regras de `POST /admin/work-orders/{id}/approve`: inicia a
+        execução e dá baixa no estoque, ou recusa tudo se faltar saldo.
+      security:
+        - customerDocument: []
+      responses:
+        "200": { $ref: "#/components/responses/PublicWorkOrder" }
+        "400": { $ref: "#/components/responses/PublicBadRequest" }
+        "404": { $ref: "#/components/responses/PublicNotFound" }
+        "409": { $ref: "#/components/responses/ApprovalConflict" }
+
+  /public/work-orders/{number}/reject:
+    parameters:
+      - $ref: "#/components/parameters/Number"
+    post:
+      tags: [Acompanhamento pelo cliente]
+      summary: Recusar o orçamento (pelo cliente)
+      security:
+        - customerDocument: []
+      responses:
+        "200": { $ref: "#/components/responses/PublicWorkOrder" }
+        "400": { $ref: "#/components/responses/PublicBadRequest" }
+        "404": { $ref: "#/components/responses/PublicNotFound" }
+        "409": { $ref: "#/components/responses/InvalidTransition" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token obtido em `POST /auth/login`.
+    customerDocument:
+      type: apiKey
+      in: header
+      name: X-Customer-Document
+      description: CPF ou CNPJ do cliente, com ou sem pontuação.
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Number:
+      name: number
+      in: path
+      required: true
+      description: Número da ordem de serviço.
+      schema: { type: integer, format: int64, minimum: 1 }
+    Limit:
+      name: limit
+      in: query
+      description: Itens por página.
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    Offset:
+      name: offset
+      in: query
+      description: Quantos itens pular.
+      schema: { type: integer, minimum: 0, default: 0 }
+
+  responses:
+    BadRequest:
+      description: |
+        Requisição inválida: corpo malformado ou com campo desconhecido
+        (`INVALID_REQUEST`), identificador inválido (`INVALID_ID`), paginação
+        inválida (`INVALID_PAGINATION`) ou dado que viola uma regra de
+        validação (o `code` diz qual).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: "`INVALID_TOKEN`: token ausente, inválido ou expirado."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: O recurso não existe (o `code` diz qual).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    InvalidTransition:
+      description: |
+        `INVALID_STATUS_TRANSITION`: a ordem de serviço não está no status em
+        que essa ação é permitida, ou `WORK_ORDER_CHANGED`: outra operação a
+        alterou no meio do caminho.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ApprovalConflict:
+      description: |
+        `INVALID_STATUS_TRANSITION`, `WORK_ORDER_CHANGED` ou
+        `INSUFFICIENT_STOCK` (alguma peça não tem saldo; nada foi alterado).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    WorkOrder:
+      description: Ordem de serviço após a ação.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/WorkOrder" }
+    PublicWorkOrder:
+      description: Ordem de serviço, só com o que o cliente precisa ver.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/PublicWorkOrder" }
+    PublicBadRequest:
+      description: |
+        Número inválido (`INVALID_ID`) ou cabeçalho `X-Customer-Document`
+        ausente (`DOCUMENT_REQUIRED`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    PublicNotFound:
+      description: |
+        `WORK_ORDER_NOT_FOUND`: resposta única para OS inexistente, documento
+        errado, inválido ou de outro cliente.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, example: INVALID_REQUEST }
+        message: { type: string, example: corpo da requisição inválido }
+
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok, unavailable] }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, example: admin@oficina.local }
+        password: { type: string, format: password }
+
+    LoginResponse:
+      type: object
+      required: [token, expires_at]
+      properties:
+        token: { type: string, description: Token JWT. }
+        expires_at: { type: string, format: date-time }
+
+    Me:
+      type: object
+      required: [id, email]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+
+    CustomerInput:
+      type: object
+      required: [name, document]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120, example: Maria Souza }
+        document:
+          type: string
+          description: CPF ou CNPJ (numérico ou alfanumérico), com ou sem pontuação.
+          example: 529.982.247-25
+        email: { type: string, format: email, description: Opcional. }
+        phone: { type: string, description: "Opcional. De 10 a 13 dígitos.", example: (11) 98765-4321 }
+
+    Customer:
+      type: object
+      required: [id, name, document, document_type, email, phone, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        document: { type: string, description: "Só dígitos e letras, sem pontuação.", example: "52998224725" }
+        document_type: { type: string, enum: [CPF, CNPJ] }
+        email: { type: string }
+        phone: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CustomerList:
+      type: object
+      required: [items, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Customer" }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    VehicleInput:
+      type: object
+      required: [customer_id, plate, brand, model, year]
+      additionalProperties: false
+      properties:
+        customer_id: { type: string, format: uuid }
+        plate: { type: string, example: ABC-1D23 }
+        brand: { type: string, minLength: 1, maxLength: 60, example: Fiat }
+        model: { type: string, minLength: 1, maxLength: 60, example: Uno }
+        year:
+          type: integer
+          minimum: 1900
+          description: De 1900 até o ano seguinte ao atual.
+          example: 2010
+
+    Vehicle:
+      type: object
+      required: [id, customer_id, plate, brand, model, year, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        customer_id: { type: string, format: uuid }
+        plate: { type: string, description: Em maiúsculas e sem hífen., example: ABC1D23 }
+        brand: { type: string }
+        model: { type: string }
+        year: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    VehicleList:
+      type: object
+      required: [items, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Vehicle" }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    ServiceInput:
+      type: object
+      required: [name, price_cents, estimated_minutes]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100, example: Troca de óleo }
+        description: { type: string, maxLength: 500 }
+        price_cents:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 100000000
+          description: Preço em centavos.
+          example: 12000
+        estimated_minutes: { type: integer, minimum: 1, maximum: 10080, example: 45 }
+
+    Service:
+      type: object
+      required: [id, name, description, price_cents, estimated_minutes, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        price_cents: { type: integer, format: int64 }
+        estimated_minutes: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ServiceList:
+      type: object
+      required: [items, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Service" }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    PartInput:
+      type: object
+      required: [sku, name, unit_price_cents]
+      additionalProperties: false
+      properties:
+        sku:
+          type: string
+          description: De 2 a 30 caracteres; letras, números e hífen. Guardado em maiúsculas.
+          example: FLT-OLEO-01
+        name: { type: string, minLength: 2, maxLength: 100, example: Filtro de óleo }
+        description: { type: string, maxLength: 500 }
+        unit_price_cents:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 100000000
+          example: 3590
+
+    Part:
+      type: object
+      required: [id, sku, name, description, unit_price_cents, stock_quantity, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        sku: { type: string }
+        name: { type: string }
+        description: { type: string }
+        unit_price_cents: { type: integer, format: int64 }
+        stock_quantity: { type: integer, description: Saldo atual do estoque. }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    PartList:
+      type: object
+      required: [items, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Part" }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    StockMovementInput:
+      type: object
+      required: [type, quantity, reason]
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum: [IN, OUT]
+          description: "`IN` é entrada (compra, devolução); `OUT` é saída (consumo, perda)."
+        quantity: { type: integer, minimum: 1, maximum: 1000000, example: 10 }
+        reason: { type: string, minLength: 1, maxLength: 200, example: Compra NF 123 }
+
+    StockMovement:
+      type: object
+      required: [id, part_id, type, quantity, reason, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        part_id: { type: string, format: uuid }
+        type: { type: string, enum: [IN, OUT] }
+        quantity: { type: integer }
+        reason: { type: string }
+        created_at: { type: string, format: date-time }
+
+    StockMovementResult:
+      type: object
+      required: [movement, stock_quantity]
+      properties:
+        movement: { $ref: "#/components/schemas/StockMovement" }
+        stock_quantity: { type: integer, description: Saldo da peça depois da movimentação. }
+
+    StockMovementList:
+      type: object
+      required: [items, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/StockMovement" }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    WorkOrderStatus:
+      type: string
+      description: |
+        Fluxo: `RECEIVED` → `IN_DIAGNOSIS` → `AWAITING_APPROVAL` →
+        `IN_EXECUTION` → `COMPLETED` → `DELIVERED`. Um orçamento recusado leva a
+        `CANCELLED`.
+      enum:
+        - RECEIVED
+        - IN_DIAGNOSIS
+        - AWAITING_APPROVAL
+        - IN_EXECUTION
+        - COMPLETED
+        - DELIVERED
+        - CANCELLED
+
+    PartQuantity:
+      type: object
+      required: [part_id, quantity]
+      additionalProperties: false
+      properties:
+        part_id: { type: string, format: uuid }
+        quantity: { type: integer, minimum: 1, maximum: 1000 }
+
+    ReplaceItemsRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        services:
+          type: array
+          description: Ids de serviços do catálogo. Cada um entra com quantidade 1, sem repetir.
+          items: { type: string, format: uuid }
+        parts:
+          type: array
+          items: { $ref: "#/components/schemas/PartQuantity" }
+
+    CreateWorkOrderRequest:
+      type: object
+      required: [vehicle_id, description]
+      additionalProperties: false
+      properties:
+        vehicle_id: { type: string, format: uuid }
+        description: { type: string, minLength: 1, maxLength: 500, example: Barulho no motor }
+        services:
+          type: array
+          items: { type: string, format: uuid }
+        parts:
+          type: array
+          items: { $ref: "#/components/schemas/PartQuantity" }
+
+    WorkOrderItem:
+      type: object
+      required: [kind, ref_id, name, unit_price_cents, quantity, total_cents]
+      properties:
+        kind: { type: string, enum: [SERVICE, PART] }
+        ref_id: { type: string, format: uuid, description: Id do serviço ou da peça. }
+        name: { type: string, description: Nome no momento em que o item entrou. }
+        unit_price_cents: { type: integer, format: int64, description: Preço no momento em que o item entrou. }
+        quantity: { type: integer }
+        total_cents: { type: integer, format: int64 }
+
+    WorkOrder:
+      type: object
+      required: [id, number, customer_id, vehicle_id, description, status, items, total_cents, created_at, updated_at, started_at, completed_at, delivered_at]
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: integer, format: int64, description: "Número sequencial, usado pelo cliente." }
+        customer_id: { type: string, format: uuid }
+        vehicle_id: { type: string, format: uuid }
+        description: { type: string }
+        status: { $ref: "#/components/schemas/WorkOrderStatus" }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/WorkOrderItem" }
+        total_cents: { type: integer, format: int64, description: "Orçamento, calculado a partir dos itens." }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time, nullable: true, description: Quando a execução começou (aprovação). }
+        completed_at: { type: string, format: date-time, nullable: true }
+        delivered_at: { type: string, format: date-time, nullable: true }
+
+    WorkOrderList:
+      type: object
+      required: [items, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/WorkOrder" }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    PublicWorkOrderItem:
+      type: object
+      required: [kind, name, unit_price_cents, quantity, total_cents]
+      properties:
+        kind: { type: string, enum: [SERVICE, PART] }
+        name: { type: string }
+        unit_price_cents: { type: integer, format: int64 }
+        quantity: { type: integer }
+        total_cents: { type: integer, format: int64 }
+
+    PublicWorkOrder:
+      type: object
+      required: [number, status, status_label, description, items, total_cents, created_at, updated_at, started_at, completed_at, delivered_at]
+      properties:
+        number: { type: integer, format: int64 }
+        status: { $ref: "#/components/schemas/WorkOrderStatus" }
+        status_label: { type: string, example: aguardando aprovação }
+        description: { type: string }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PublicWorkOrderItem" }
+        total_cents: { type: integer, format: int64 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time, nullable: true }
+        completed_at: { type: string, format: date-time, nullable: true }
+        delivered_at: { type: string, format: date-time, nullable: true }
+
+    ExecutionTime:
+      type: object
+      required: [completed_orders, average_execution_minutes]
+      properties:
+        completed_orders: { type: integer, description: Quantas ordens finalizadas entraram na conta. }
+        average_execution_minutes: { type: number, description: "Média em minutos, com uma casa decimal." }

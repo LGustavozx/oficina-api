@@ -14,6 +14,7 @@ import (
 	catalogapp "oficina-api/internal/catalog/application"
 	cataloghttp "oficina-api/internal/catalog/http"
 	cataloginfra "oficina-api/internal/catalog/infrastructure"
+	"oficina-api/internal/docs"
 	identityapp "oficina-api/internal/identity/application"
 	identityhttp "oficina-api/internal/identity/http"
 	identityinfra "oficina-api/internal/identity/infrastructure"
@@ -82,6 +83,7 @@ func NewHandler(ctx context.Context, db *sql.DB, cfg config.Config, logger *slog
 		func(mux *http.ServeMux) { inventoryhttp.NewPartHandler(inventory, logger).Register(mux, protect) },
 		func(mux *http.ServeMux) { workorderhttp.NewHandler(workOrders, logger).Register(mux, protect) },
 		workorderhttp.NewPublicHandler(workOrders, logger).Register,
+		docs.Register,
 	), nil
 }
 
