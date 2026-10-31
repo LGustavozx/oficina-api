@@ -1,6 +1,5 @@
 name: CI
 
-# Roda em todo PR e em todo push nas branches protegidas.
 on:
   pull_request:
     branches: [develop, main]
@@ -39,19 +38,67 @@ jobs:
   test:
     name: Testes e cobertura
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: oficina
+          POSTGRES_PASSWORD: oficina
+          POSTGRES_DB: oficina
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U oficina -d oficina"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://oficina:oficina@localhost:5432/oficina?sslmode=disable
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
 
-      # -race detecta acessos concorrentes inseguros; precisa de compilador C,
-      # por isso roda aqui no CI e não no Windows local.
+      # -race precisa de compilador C, que não temos no Windows local.
       - name: go test
         run: go test -race ./...
 
       - name: cobertura mínima nos pacotes críticos
         run: bash scripts/check-coverage.sh
+
+  reports:
+    name: Relatórios de qualidade
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: oficina
+          POSTGRES_PASSWORD: oficina
+          POSTGRES_DB: oficina
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U oficina -d oficina"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://oficina:oficina@localhost:5432/oficina?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: gerar relatórios
+        run: bash scripts/quality-report.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: relatorios-de-qualidade
+          path: reports/
 
   vulncheck:
     name: Vulnerabilidades

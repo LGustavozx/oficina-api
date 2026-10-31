@@ -1,5 +1,3 @@
-# Nome fixo do projeto: os recursos (rede, volume) ficam como "oficina-api_*",
-# em vez de depender do nome da pasta.
 name: oficina-api
 
 services:
@@ -23,7 +21,10 @@ services:
     build: .
     environment:
       HTTP_PORT: "8080"
-      # O host é "db": dentro da rede do compose, o nome do serviço vira o endereço.
+      # Valores padrão só para desenvolvimento local; troque-os em qualquer outro ambiente.
+      JWT_SECRET: ${JWT_SECRET:-segredo-apenas-para-desenvolvimento-local}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@oficina.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-troque-esta-senha}
       DATABASE_URL: postgres://${POSTGRES_USER:-oficina}:${POSTGRES_PASSWORD:-oficina}@db:5432/${POSTGRES_DB:-oficina}?sslmode=disable
     ports:
       - "${HTTP_PORT:-8080}:8080"

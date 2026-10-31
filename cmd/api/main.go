@@ -1,5 +1,3 @@
-// Comando api: ponto de entrada da aplicação. Só "costura" as peças
-// (config, banco, servidor); nenhuma regra de negócio mora aqui.
 package main
 
 import (
@@ -12,9 +10,11 @@ import (
 	"syscall"
 	"time"
 
+	"oficina-api/internal/app"
 	"oficina-api/internal/platform/config"
 	"oficina-api/internal/platform/database"
 	"oficina-api/internal/platform/httpserver"
+	"oficina-api/internal/shared/clock"
 )
 
 func main() {
@@ -26,15 +26,13 @@ func main() {
 	}
 }
 
-// run existe separado de main para podermos devolver erros (main não devolve)
-// e garantir que os defers rodem antes do os.Exit.
+// run fica separado de main para os defers rodarem antes do os.Exit.
 func run(logger *slog.Logger) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
 
-	// ctx é cancelado quando o processo recebe Ctrl+C ou SIGTERM (docker stop).
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -53,9 +51,12 @@ func run(logger *slog.Logger) error {
 	}
 	logger.Info("migrations aplicadas")
 
-	server := httpserver.New(cfg.HTTPPort, httpserver.NewHandler(db, logger))
+	handler, err := app.NewHandler(ctx, db, cfg, logger, clock.System{})
+	if err != nil {
+		return err
+	}
+	server := httpserver.New(cfg.HTTPPort, handler)
 
-	// O servidor roda em outra goroutine para a main poder esperar o sinal de parada.
 	serverErr := make(chan error, 1)
 	go func() {
 		logger.Info("servidor iniciado", "port", cfg.HTTPPort)
@@ -71,8 +72,6 @@ func run(logger *slog.Logger) error {
 		logger.Info("sinal de parada recebido, encerrando")
 	}
 
-	// Graceful shutdown: para de aceitar conexões novas e dá até 10s
-	// para as requisições em andamento terminarem.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return server.Shutdown(shutdownCtx)

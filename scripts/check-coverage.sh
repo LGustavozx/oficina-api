@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Falha se algum pacote crítico tiver cobertura de testes abaixo do mínimo.
-# A cada fase, acrescente à lista os novos pacotes com regra de negócio.
+# Falha se algum pacote crítico tiver cobertura abaixo do mínimo.
+# Acrescente à lista os novos pacotes com regra de negócio a cada fase.
 set -euo pipefail
 
 MIN=80
@@ -8,15 +8,39 @@ MIN=80
 CRITICAL_PACKAGES=(
   oficina-api/internal/platform/config
   oficina-api/internal/platform/httpserver
+  oficina-api/internal/shared/apperr
+  oficina-api/internal/shared/money
+  oficina-api/internal/shared/clock
+  oficina-api/internal/registry/domain
+  oficina-api/internal/registry/application
+  oficina-api/internal/registry/infrastructure
+  oficina-api/internal/registry/http
+  oficina-api/internal/shared/text
+  oficina-api/internal/platform/database
+  oficina-api/internal/catalog/domain
+  oficina-api/internal/catalog/application
+  oficina-api/internal/catalog/infrastructure
+  oficina-api/internal/catalog/http
+  oficina-api/internal/inventory/domain
+  oficina-api/internal/inventory/application
+  oficina-api/internal/inventory/infrastructure
+  oficina-api/internal/inventory/http
+  oficina-api/internal/workorder/domain
+  oficina-api/internal/workorder/application
+  oficina-api/internal/workorder/infrastructure
+  oficina-api/internal/workorder/http
+  oficina-api/internal/docs
+  oficina-api/internal/identity/domain
+  oficina-api/internal/identity/application
+  oficina-api/internal/identity/infrastructure
+  oficina-api/internal/identity/http
 )
 
 failed=0
 for pkg in "${CRITICAL_PACKAGES[@]}"; do
-  # A saída é algo como: "ok  <pacote>  0.5s  coverage: 87.5% of statements"
   line="$(go test -cover "$pkg" | grep 'coverage:')"
   pct="$(echo "$line" | sed -E 's/.*coverage: ([0-9]+(\.[0-9]+)?)%.*/\1/')"
 
-  # awk faz a comparação de decimais, que o bash puro não faz.
   if awk -v p="$pct" -v m="$MIN" 'BEGIN { exit !(p < m) }'; then
     echo "FALHA: $pkg com ${pct}% (mínimo ${MIN}%)"
     failed=1
