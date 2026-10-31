@@ -11,6 +11,7 @@ import (
 const (
 	sqlStateUniqueViolation     = "23505"
 	sqlStateForeignKeyViolation = "23503"
+	sqlStateCheckViolation      = "23514"
 )
 
 // IsUniqueViolation informa se o erro é de chave duplicada (UNIQUE/PRIMARY KEY).
@@ -36,3 +37,6 @@ func RequireAffected(result sql.Result, notFound error) error {
 	}
 	return nil
 }
+
+// IsCheckViolation informa se o erro é de uma restrição CHECK da tabela.
+func IsCheckViolation(err error) bool { return hasSQLState(err, sqlStateCheckViolation) }
