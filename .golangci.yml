@@ -12,6 +12,10 @@ linters:
       - path: _test\.go
         linters:
           - gosec
+      # testdb só gera dados aleatórios de teste; o gerador fraco é suficiente.
+      - path: internal/platform/testdb/
+        linters:
+          - gosec
 
 formatters:
   enable:

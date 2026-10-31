@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -24,7 +23,6 @@ import (
 	identityinfra "oficina-api/internal/identity/infrastructure"
 	"oficina-api/internal/platform/config"
 	"oficina-api/internal/platform/testdb"
-	registrydomain "oficina-api/internal/registry/domain"
 	"oficina-api/internal/shared/clock"
 )
 
@@ -119,39 +117,6 @@ func (a *api) cleanup(query string, args ...any) {
 	a.t.Cleanup(func() { _, _ = a.db.Exec(query, args...) })
 }
 
-func randomCPF() string {
-	for {
-		digits := make([]int, 11)
-		for i := 0; i < 9; i++ {
-			digits[i] = rand.IntN(10)
-		}
-		digit := func(base []int, first int) int {
-			sum := 0
-			for i, d := range base {
-				sum += d * (first - i)
-			}
-			if rest := sum % 11; rest >= 2 {
-				return 11 - rest
-			}
-			return 0
-		}
-		digits[9], digits[10] = digit(digits[:9], 10), 0
-		digits[10] = digit(digits[:10], 11)
-
-		var b strings.Builder
-		for _, d := range digits {
-			fmt.Fprint(&b, d)
-		}
-		if _, err := registrydomain.NewDocument(b.String()); err == nil {
-			return b.String()
-		}
-	}
-}
-
-func randomPlate() string {
-	return fmt.Sprintf("%c%c%c%04d", 'A'+rand.IntN(26), 'A'+rand.IntN(26), 'A'+rand.IntN(26), rand.IntN(10000))
-}
-
 // world é um cliente com veículo, um serviço e duas peças com estoque.
 type world struct {
 	customerID, document, vehicleID, serviceID, filterID, sparkID string
@@ -162,12 +127,12 @@ func (a *api) newWorld(filterStock, sparkStock int) world {
 	tag := uuid.NewString()[:8]
 	var w world
 
-	w.document = randomCPF()
+	w.document = testdb.RandomCPF()
 	w.customerID = a.must(201, "POST", "/admin/customers", map[string]any{"name": "Maria Souza", "document": w.document})["id"].(string)
 	a.cleanup(`DELETE FROM clientes WHERE id = $1`, w.customerID)
 
 	w.vehicleID = a.must(201, "POST", "/admin/vehicles", map[string]any{
-		"customer_id": w.customerID, "plate": randomPlate(), "brand": "Fiat", "model": "Uno", "year": 2010,
+		"customer_id": w.customerID, "plate": testdb.RandomPlate(), "brand": "Fiat", "model": "Uno", "year": 2010,
 	})["id"].(string)
 	a.cleanup(`DELETE FROM veiculos WHERE id = $1`, w.vehicleID)
 

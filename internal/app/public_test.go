@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"oficina-api/internal/platform/testdb"
 )
 
 // public faz uma chamada como o cliente: sem login, só com o CPF/CNPJ no cabeçalho.
@@ -122,7 +124,7 @@ func TestCustomerOnlySeesAndActsOnTheirOwnOrders(t *testing.T) {
 	_, _, ghostBody := a.public("GET", "/public/work-orders/999999999", mine.document)
 	attempts := map[string]string{
 		"documento de outro cliente":      other.document,
-		"documento válido e sem cadastro": randomCPF(),
+		"documento válido e sem cadastro": testdb.RandomCPF(),
 		"documento inválido":              "123",
 		"documento só com formatação":     "000.000.000-00",
 	}

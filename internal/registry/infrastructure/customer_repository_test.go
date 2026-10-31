@@ -3,8 +3,6 @@ package infrastructure
 import (
 	"context"
 	"database/sql"
-	"fmt"
-	"math/rand/v2"
 	"strings"
 	"testing"
 	"time"
@@ -16,43 +14,13 @@ import (
 	"oficina-api/internal/shared/apperr"
 )
 
-func randomCPF() string {
-	for {
-		digits := make([]int, 11)
-		for i := 0; i < 9; i++ {
-			digits[i] = rand.IntN(10)
-		}
-		digits[9] = cpfCheckDigit(digits[:9], 10)
-		digits[10] = cpfCheckDigit(digits[:10], 11)
-
-		var b strings.Builder
-		for _, d := range digits {
-			fmt.Fprint(&b, d)
-		}
-		if _, err := domain.NewDocument(b.String()); err == nil {
-			return b.String()
-		}
-	}
-}
-
-func cpfCheckDigit(base []int, firstWeight int) int {
-	sum := 0
-	for i, d := range base {
-		sum += d * (firstWeight - i)
-	}
-	if rest := sum % 11; rest >= 2 {
-		return 11 - rest
-	}
-	return 0
-}
-
 func newCustomer(t *testing.T, db *sql.DB, name string) domain.Customer {
 	t.Helper()
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	customer, err := domain.NewCustomer(uuid.New(), domain.CustomerData{
 		Name:     name,
-		Document: randomCPF(),
+		Document: testdb.RandomCPF(),
 		Email:    "cliente@oficina.com",
 		Phone:    "11987654321",
 	}, now)
