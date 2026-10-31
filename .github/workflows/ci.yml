@@ -1,6 +1,5 @@
 name: CI
 
-# Roda em todo PR e em todo push nas branches protegidas.
 on:
   pull_request:
     branches: [develop, main]
@@ -45,8 +44,7 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # -race detecta acessos concorrentes inseguros; precisa de compilador C,
-      # por isso roda aqui no CI e não no Windows local.
+      # -race precisa de compilador C, que não temos no Windows local.
       - name: go test
         run: go test -race ./...
 
