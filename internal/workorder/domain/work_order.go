@@ -217,6 +217,13 @@ func invalidTransition(current Status) error {
 	return apperr.Conflict(CodeInvalidTransition, fmt.Sprintf("a ordem de serviço está %s e não aceita esta ação", current.Label()))
 }
 
+// ExecutionStats resume o tempo de execução (da aprovação à finalização) das
+// ordens de serviço finalizadas.
+type ExecutionStats struct {
+	CompletedOrders int
+	AverageDuration time.Duration
+}
+
 type Repository interface {
 	// Create grava a ordem de serviço e devolve-a com o Number gerado.
 	Create(ctx context.Context, order WorkOrder) (WorkOrder, error)
@@ -227,7 +234,12 @@ type Repository interface {
 	Save(ctx context.Context, order WorkOrder, expected Status) error
 
 	FindByID(ctx context.Context, id uuid.UUID) (WorkOrder, error)
+	FindByNumber(ctx context.Context, number int64) (WorkOrder, error)
 
 	// status vazio significa "sem filtro".
 	List(ctx context.Context, status Status, limit, offset int) ([]WorkOrder, error)
+
+	// ExecutionStats considera as ordens finalizadas no intervalo [from, to).
+	// Um time.Time zero em from ou to deixa aquele lado sem limite.
+	ExecutionStats(ctx context.Context, from, to time.Time) (ExecutionStats, error)
 }

@@ -19,6 +19,10 @@ type fakeRepo struct {
 	orders  map[uuid.UUID]domain.WorkOrder
 	nextNum int64
 	saveErr error
+
+	stats              domain.ExecutionStats
+	statsErr           error
+	statsFrom, statsTo time.Time
 }
 
 func newFakeRepo() *fakeRepo { return &fakeRepo{orders: map[uuid.UUID]domain.WorkOrder{}, nextNum: 1} }
@@ -73,20 +77,23 @@ type fakeWorld struct {
 	stockErr error
 
 	lookupErr     error // erro inesperado ao buscar o veículo
+	customerErr   error // erro inesperado ao buscar o cliente
 	itemLookupErr error // erro inesperado ao buscar serviço ou peça
 
-	vehicles map[uuid.UUID]uuid.UUID // veículo -> cliente
-	services map[uuid.UUID]ItemInfo
-	parts    map[uuid.UUID]ItemInfo
+	vehicles  map[uuid.UUID]uuid.UUID // veículo -> cliente
+	documents map[string]uuid.UUID    // documento -> cliente
+	services  map[uuid.UUID]ItemInfo
+	parts     map[uuid.UUID]ItemInfo
 }
 
 func newWorld() *fakeWorld {
 	return &fakeWorld{
-		repo:     newFakeRepo(),
-		stock:    map[uuid.UUID]int{},
-		vehicles: map[uuid.UUID]uuid.UUID{},
-		services: map[uuid.UUID]ItemInfo{},
-		parts:    map[uuid.UUID]ItemInfo{},
+		repo:      newFakeRepo(),
+		stock:     map[uuid.UUID]int{},
+		vehicles:  map[uuid.UUID]uuid.UUID{},
+		documents: map[string]uuid.UUID{},
+		services:  map[uuid.UUID]ItemInfo{},
+		parts:     map[uuid.UUID]ItemInfo{},
 	}
 }
 
@@ -170,13 +177,14 @@ func setup() fixture {
 	f := fixture{world: w, vehicleID: uuid.New(), customerID: uuid.New(), oilChangeID: uuid.New(), filterID: uuid.New(), sparkID: uuid.New()}
 
 	w.vehicles[f.vehicleID] = f.customerID
+	w.documents[ownerDocument] = f.customerID
 	w.services[f.oilChangeID] = ItemInfo{Name: "Troca de óleo", UnitPrice: money.FromCents(12000)}
 	w.parts[f.filterID] = ItemInfo{Name: "Filtro de óleo", UnitPrice: money.FromCents(3590)}
 	w.parts[f.sparkID] = ItemInfo{Name: "Vela", UnitPrice: money.FromCents(2500)}
 	w.stock[f.filterID] = 10
 	w.stock[f.sparkID] = 10
 
-	f.svc = NewWorkOrderService(w.repo, w, w, w, w, clock.Fixed{Time: now})
+	f.svc = NewWorkOrderService(w.repo, w, w, w, w, w, clock.Fixed{Time: now})
 	return f
 }
 
@@ -544,5 +552,173 @@ func TestApprovePropagatesOtherStockErrors(t *testing.T) {
 	stored, _ := f.svc.Get(context.Background(), order.ID)
 	if stored.Status != domain.StatusAwaitingApproval {
 		t.Errorf("a ordem deveria ter voltado a aguardar aprovação: %s", stored.Status)
+	}
+}
+
+func (r *fakeRepo) FindByNumber(_ context.Context, number int64) (domain.WorkOrder, error) {
+	for _, o := range r.orders {
+		if o.Number == number {
+			return o, nil
+		}
+	}
+	return domain.WorkOrder{}, apperr.NotFound(domain.CodeWorkOrderNotFound, "ordem de serviço não encontrada")
+}
+
+func (r *fakeRepo) ExecutionStats(_ context.Context, from, to time.Time) (domain.ExecutionStats, error) {
+	r.statsFrom, r.statsTo = from, to
+	return r.stats, r.statsErr
+}
+
+const ownerDocument = "52998224725"
+
+// CustomerIDByDocument imita o comportamento real: formato inválido é erro de
+// validação, e documento válido mas desconhecido é "não encontrado".
+func (w *fakeWorld) CustomerIDByDocument(_ context.Context, raw string) (uuid.UUID, error) {
+	if w.customerErr != nil {
+		return uuid.Nil, w.customerErr
+	}
+	if len(raw) < 11 {
+		return uuid.Nil, apperr.Validation("INVALID_DOCUMENT", "CPF/CNPJ inválido")
+	}
+	id, ok := w.documents[raw]
+	if !ok {
+		return uuid.Nil, notFound("CUSTOMER_NOT_FOUND")
+	}
+	return id, nil
+}
+
+func wantNotFound(t *testing.T, err error) {
+	t.Helper()
+	appErr, ok := apperr.As(err)
+	if !ok || appErr.Kind != apperr.KindNotFound || appErr.Code != domain.CodeWorkOrderNotFound || appErr.Message != "ordem de serviço não encontrada" {
+		t.Fatalf("erro = %v, esperado a resposta única de OS não encontrada", err)
+	}
+}
+
+func TestGetForCustomer(t *testing.T) {
+	f := setup()
+	ctx := context.Background()
+	order := f.order(t)
+
+	got, err := f.svc.GetForCustomer(ctx, order.Number, ownerDocument)
+	if err != nil || got.ID != order.ID {
+		t.Fatalf("GetForCustomer = %+v (%v)", got, err)
+	}
+}
+
+// Todas as falhas de identificação precisam dar exatamente o mesmo erro.
+func TestGetForCustomerFailuresAreIndistinguishable(t *testing.T) {
+	f := setup()
+	ctx := context.Background()
+	order := f.order(t)
+
+	otherDocument := "11222333000181"
+	f.world.documents[otherDocument] = uuid.New() // outro cliente, que não é o dono da OS
+
+	tests := []struct {
+		name     string
+		number   int64
+		document string
+	}{
+		{"documento de outro cliente", order.Number, otherDocument},
+		{"documento desconhecido", order.Number, "99999999999"},
+		{"documento inválido", order.Number, "123"},
+		{"documento vazio", order.Number, ""},
+		{"número inexistente", 9999, ownerDocument},
+		{"número inexistente e documento inválido", 9999, "123"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := f.svc.GetForCustomer(ctx, tt.number, tt.document)
+
+			wantNotFound(t, err)
+		})
+	}
+}
+
+func TestGetForCustomerPropagatesUnexpectedErrors(t *testing.T) {
+	f := setup()
+	order := f.order(t)
+	boom := errors.New("banco fora do ar")
+	f.world.customerErr = boom
+
+	_, err := f.svc.GetForCustomer(context.Background(), order.Number, ownerDocument)
+
+	if !errors.Is(err, boom) {
+		t.Errorf("erro = %v, esperado o original (uma falha real não pode virar 404)", err)
+	}
+}
+
+func TestCustomerApprovesAndStockIsConsumed(t *testing.T) {
+	f := setup()
+	order := f.awaitingApproval(t)
+
+	approved, err := f.svc.ApproveForCustomer(context.Background(), order.Number, ownerDocument)
+
+	if err != nil || approved.Status != domain.StatusInExecution {
+		t.Fatalf("ApproveForCustomer = %+v (%v)", approved, err)
+	}
+	if f.world.stock[f.filterID] != 8 {
+		t.Errorf("estoque = %d, esperado 8: a aprovação do cliente também dá baixa", f.world.stock[f.filterID])
+	}
+}
+
+func TestCustomerRejects(t *testing.T) {
+	f := setup()
+	order := f.awaitingApproval(t)
+
+	rejected, err := f.svc.RejectForCustomer(context.Background(), order.Number, ownerDocument)
+
+	if err != nil || rejected.Status != domain.StatusCancelled {
+		t.Fatalf("RejectForCustomer = %+v (%v)", rejected, err)
+	}
+	if f.world.stock[f.filterID] != 10 {
+		t.Error("recusar não pode mexer no estoque")
+	}
+}
+
+func TestCustomerCannotActOnSomeoneElsesOrder(t *testing.T) {
+	f := setup()
+	order := f.awaitingApproval(t)
+	f.world.documents["11222333000181"] = uuid.New()
+
+	_, err := f.svc.ApproveForCustomer(context.Background(), order.Number, "11222333000181")
+	wantNotFound(t, err)
+	_, err = f.svc.RejectForCustomer(context.Background(), order.Number, "11222333000181")
+	wantNotFound(t, err)
+
+	stored, _ := f.svc.Get(context.Background(), order.ID)
+	if stored.Status != domain.StatusAwaitingApproval || f.world.stock[f.filterID] != 10 {
+		t.Errorf("a OS de outro cliente não pode mudar: %s, estoque %d", stored.Status, f.world.stock[f.filterID])
+	}
+}
+
+func TestCustomerActionsRespectTheStatusRules(t *testing.T) {
+	f := setup()
+	order := f.order(t) // RECEIVED: ainda não há orçamento para aprovar
+
+	_, err := f.svc.ApproveForCustomer(context.Background(), order.Number, ownerDocument)
+
+	wantErr(t, err, apperr.KindConflict, domain.CodeInvalidTransition)
+}
+
+func TestExecutionStatsPassesThePeriod(t *testing.T) {
+	f := setup()
+	f.world.repo.stats = domain.ExecutionStats{CompletedOrders: 3, AverageDuration: 90 * time.Minute}
+	from, to := now.AddDate(0, -1, 0), now
+
+	got, err := f.svc.ExecutionStats(context.Background(), from, to)
+
+	if err != nil || got.CompletedOrders != 3 || got.AverageDuration != 90*time.Minute {
+		t.Errorf("stats = %+v (%v)", got, err)
+	}
+	if !f.world.repo.statsFrom.Equal(from) || !f.world.repo.statsTo.Equal(to) {
+		t.Error("o período deveria chegar ao repositório")
+	}
+
+	f.world.repo.statsErr = errors.New("falha")
+	if _, err := f.svc.ExecutionStats(context.Background(), time.Time{}, time.Time{}); err == nil {
+		t.Error("o erro do repositório deveria ser propagado")
 	}
 }

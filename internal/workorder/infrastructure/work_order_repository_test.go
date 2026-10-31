@@ -340,3 +340,88 @@ func TestListEmptyResultIsEmptySliceNotNil(t *testing.T) {
 		t.Errorf("esperado slice vazio, veio %#v (%v)", got, err)
 	}
 }
+
+func TestFindByNumber(t *testing.T) {
+	s := newScenario(t)
+	repo := NewWorkOrderRepository(s.db)
+	order := s.create(t, repo, s.items())
+
+	got, err := repo.FindByNumber(context.Background(), order.Number)
+	if err != nil || !sameOrder(got, order) {
+		t.Fatalf("FindByNumber = %+v (%v), esperado %+v", got, err, order)
+	}
+
+	_, err = repo.FindByNumber(context.Background(), -1)
+	wantAppErr(t, err, apperr.KindNotFound, domain.CodeWorkOrderNotFound)
+}
+
+// completedOrder grava uma OS já finalizada, com o tempo de execução informado.
+func (s scenario) completedOrder(t *testing.T, repo *WorkOrderRepository, completedAt time.Time, duration time.Duration) {
+	t.Helper()
+	order, err := domain.NewWorkOrder(uuid.New(), s.customerID, s.vehicleID, "Revisão", nil, completedAt.Add(-duration))
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := completedAt.Add(-duration)
+	order.Status, order.StartedAt, order.CompletedAt, order.UpdatedAt = domain.StatusCompleted, &started, &completedAt, completedAt
+
+	created, err := repo.Create(context.Background(), order)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = s.db.Exec(`DELETE FROM ordens_servico WHERE id = $1`, created.ID) })
+}
+
+// As ordens de teste ficam em 2001, longe de qualquer dado real do banco.
+func TestExecutionStats(t *testing.T) {
+	s := newScenario(t)
+	repo := NewWorkOrderRepository(s.db)
+	ctx := context.Background()
+	january := time.Date(2001, 1, 10, 12, 0, 0, 0, time.UTC)
+	february := time.Date(2001, 2, 10, 12, 0, 0, 0, time.UTC)
+
+	s.completedOrder(t, repo, january, 60*time.Minute)
+	s.completedOrder(t, repo, january.Add(time.Hour), 120*time.Minute)
+	s.completedOrder(t, repo, february, 30*time.Minute)
+
+	// uma OS que ainda não terminou não entra na conta
+	s.create(t, repo, nil)
+
+	tests := []struct {
+		name     string
+		from, to time.Time
+		count    int
+		average  time.Duration
+	}{
+		{"só janeiro", time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2001, 2, 1, 0, 0, 0, 0, time.UTC), 2, 90 * time.Minute},
+		{"só fevereiro", time.Date(2001, 2, 1, 0, 0, 0, 0, time.UTC), time.Date(2001, 3, 1, 0, 0, 0, 0, time.UTC), 1, 30 * time.Minute},
+		{"os dois meses", time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2001, 3, 1, 0, 0, 0, 0, time.UTC), 3, 70 * time.Minute},
+		{"o fim do intervalo é exclusivo", time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC), february, 2, 90 * time.Minute},
+		{"período sem ordens", time.Date(2001, 6, 1, 0, 0, 0, 0, time.UTC), time.Date(2001, 7, 1, 0, 0, 0, 0, time.UTC), 0, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := repo.ExecutionStats(ctx, tt.from, tt.to)
+
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.CompletedOrders != tt.count || got.AverageDuration != tt.average {
+				t.Errorf("stats = %+v, esperado %d ordens e média %v", got, tt.count, tt.average)
+			}
+		})
+	}
+}
+
+func TestExecutionStatsWithoutPeriodIncludesEverything(t *testing.T) {
+	s := newScenario(t)
+	repo := NewWorkOrderRepository(s.db)
+	s.completedOrder(t, repo, time.Date(2001, 5, 1, 12, 0, 0, 0, time.UTC), 45*time.Minute)
+
+	got, err := repo.ExecutionStats(context.Background(), time.Time{}, time.Time{})
+
+	if err != nil || got.CompletedOrders < 1 || got.AverageDuration <= 0 {
+		t.Errorf("sem período deveria incluir as ordens existentes: %+v (%v)", got, err)
+	}
+}

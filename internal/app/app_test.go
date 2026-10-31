@@ -154,7 +154,7 @@ func randomPlate() string {
 
 // world é um cliente com veículo, um serviço e duas peças com estoque.
 type world struct {
-	customerID, vehicleID, serviceID, filterID, sparkID string
+	customerID, document, vehicleID, serviceID, filterID, sparkID string
 }
 
 func (a *api) newWorld(filterStock, sparkStock int) world {
@@ -162,7 +162,8 @@ func (a *api) newWorld(filterStock, sparkStock int) world {
 	tag := uuid.NewString()[:8]
 	var w world
 
-	w.customerID = a.must(201, "POST", "/admin/customers", map[string]any{"name": "Maria Souza", "document": randomCPF()})["id"].(string)
+	w.document = randomCPF()
+	w.customerID = a.must(201, "POST", "/admin/customers", map[string]any{"name": "Maria Souza", "document": w.document})["id"].(string)
 	a.cleanup(`DELETE FROM clientes WHERE id = $1`, w.customerID)
 
 	w.vehicleID = a.must(201, "POST", "/admin/vehicles", map[string]any{

@@ -65,6 +65,7 @@ func NewHandler(ctx context.Context, db *sql.DB, cfg config.Config, logger *slog
 		workorderinfra.NewWorkOrderRepository(db),
 		database.Transactor{DB: db},
 		vehicleDirectory{vehicles},
+		customerDirectory{customers},
 		itemCatalog{services: services, parts: inventory},
 		stockConsumer{inventory},
 		clk,
@@ -80,6 +81,7 @@ func NewHandler(ctx context.Context, db *sql.DB, cfg config.Config, logger *slog
 		func(mux *http.ServeMux) { cataloghttp.NewServiceHandler(services, logger).Register(mux, protect) },
 		func(mux *http.ServeMux) { inventoryhttp.NewPartHandler(inventory, logger).Register(mux, protect) },
 		func(mux *http.ServeMux) { workorderhttp.NewHandler(workOrders, logger).Register(mux, protect) },
+		workorderhttp.NewPublicHandler(workOrders, logger).Register,
 	), nil
 }
 
@@ -93,6 +95,15 @@ type vehicleDirectory struct {
 func (d vehicleDirectory) CustomerOf(ctx context.Context, vehicleID uuid.UUID) (uuid.UUID, error) {
 	vehicle, err := d.vehicles.Get(ctx, vehicleID)
 	return vehicle.CustomerID, err
+}
+
+type customerDirectory struct {
+	customers *registryapp.CustomerService
+}
+
+func (d customerDirectory) CustomerIDByDocument(ctx context.Context, rawDocument string) (uuid.UUID, error) {
+	customer, err := d.customers.FindByDocument(ctx, rawDocument)
+	return customer.ID, err
 }
 
 type itemCatalog struct {

@@ -34,6 +34,15 @@ type fakeService struct {
 	lastDesc  string
 	lastCalls []string
 	listArgs  [3]any
+	statsArgs [2]time.Time
+}
+
+func (f *fakeService) ExecutionStats(_ context.Context, from, to time.Time) (domain.ExecutionStats, error) {
+	f.statsArgs = [2]time.Time{from, to}
+	if f.failWith != nil {
+		return domain.ExecutionStats{}, f.failWith
+	}
+	return domain.ExecutionStats{CompletedOrders: 4, AverageDuration: 93*time.Minute + 20*time.Second}, nil
 }
 
 func (f *fakeService) order() domain.WorkOrder {
