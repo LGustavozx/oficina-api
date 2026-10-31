@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -38,17 +39,17 @@ func newScenario(t *testing.T) scenario {
 	s := scenario{db: db, customerID: uuid.New(), vehicleID: uuid.New(), serviceID: uuid.New(), partID: uuid.New(), otherID: uuid.New()}
 	tag := uuid.NewString()[:8]
 
-	exec(t, db, `INSERT INTO clientes (id, nome, documento, tipo_documento, criado_em, atualizado_em) VALUES ($1, 'Cliente Teste', $2, 'CPF', $3, $3)`, s.customerID, "OS"+tag, now)
+	exec(t, db, `INSERT INTO clientes (id, nome, documento, tipo_documento, criado_em, atualizado_em) VALUES ($1, 'Cliente Teste', $2, 'CPF', $3, $3)`, s.customerID, testdb.RandomCPF(), now)
 	t.Cleanup(func() { _, _ = db.Exec(`DELETE FROM clientes WHERE id = $1`, s.customerID) })
 
-	exec(t, db, `INSERT INTO veiculos (id, cliente_id, placa, marca, modelo, ano, criado_em, atualizado_em) VALUES ($1, $2, $3, 'Fiat', 'Uno', 2010, $4, $4)`, s.vehicleID, s.customerID, "OS"+tag, now)
+	exec(t, db, `INSERT INTO veiculos (id, cliente_id, placa, marca, modelo, ano, criado_em, atualizado_em) VALUES ($1, $2, $3, 'Fiat', 'Uno', 2010, $4, $4)`, s.vehicleID, s.customerID, testdb.RandomPlate(), now)
 	t.Cleanup(func() { _, _ = db.Exec(`DELETE FROM veiculos WHERE id = $1`, s.vehicleID) })
 
 	exec(t, db, `INSERT INTO servicos (id, nome, preco_centavos, duracao_estimada_min, criado_em, atualizado_em) VALUES ($1, $2, 12000, 45, $3, $3)`, s.serviceID, "Serviço "+tag, now)
 	t.Cleanup(func() { _, _ = db.Exec(`DELETE FROM servicos WHERE id = $1`, s.serviceID) })
 
 	for i, id := range []uuid.UUID{s.partID, s.otherID} {
-		exec(t, db, `INSERT INTO pecas (id, sku, nome, preco_unitario_centavos, criado_em, atualizado_em) VALUES ($1, $2, 'Peça', 3590, $3, $3)`, id, "OS"+tag+string(rune('A'+i)), now)
+		exec(t, db, `INSERT INTO pecas (id, sku, nome, preco_unitario_centavos, criado_em, atualizado_em) VALUES ($1, $2, 'Peça', 3590, $3, $3)`, id, "T-"+strings.ToUpper(tag)+string(rune('A'+i)), now)
 		t.Cleanup(func() { _, _ = db.Exec(`DELETE FROM pecas WHERE id = $1`, id) })
 	}
 	return s
