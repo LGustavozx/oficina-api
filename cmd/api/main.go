@@ -84,9 +84,13 @@ func run(logger *slog.Logger) error {
 	customers := registryapp.NewCustomerService(registryinfra.NewCustomerRepository(db), clk)
 	customerHandler := registryhttp.NewCustomerHandler(customers, logger)
 
+	vehicles := registryapp.NewVehicleService(registryinfra.NewVehicleRepository(db), clk)
+	vehicleHandler := registryhttp.NewVehicleHandler(vehicles, logger)
+
 	handler := httpserver.NewHandler(db, logger,
 		identityHandler.Register,
 		func(mux *http.ServeMux) { customerHandler.Register(mux, identityHandler.RequireAuth) },
+		func(mux *http.ServeMux) { vehicleHandler.Register(mux, identityHandler.RequireAuth) },
 	)
 	server := httpserver.New(cfg.HTTPPort, handler)
 

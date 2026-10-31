@@ -2,7 +2,7 @@
 
 API REST de uma oficina mecânica: ordens de serviço, clientes, veículos, serviços e estoque de peças. Feita em Go, com PostgreSQL, para o Tech Challenge (Fase 1) da pós-graduação.
 
-O projeto está em construção. Já existem a base (config, banco, migrations, health check), os value objects do domínio (CPF/CNPJ, placa, dinheiro), o login com JWT, o cadastro de clientes e o CI. As próximas etapas são veículos, serviços, estoque e ordem de serviço.
+O projeto está em construção. Já existem a base (config, banco, migrations, health check), os value objects do domínio (CPF/CNPJ, placa, dinheiro), o login com JWT, o cadastro de clientes e veículos e o CI. As próximas etapas são serviços, estoque e ordem de serviço.
 
 ## Rodando
 
@@ -40,6 +40,14 @@ curl localhost:8080/admin/me -H "Authorization: Bearer <token>"
 | `DELETE /admin/customers/{id}` | JWT | remove |
 
 `document` aceita CPF ou CNPJ, com ou sem pontuação. `email` e `phone` são opcionais.
+
+Veículos seguem o mesmo formato em `/admin/vehicles` (POST, GET, GET `/{id}`, PUT `/{id}`, DELETE `/{id}`):
+
+```json
+{"customer_id": "<id do cliente>", "plate": "ABC-1D23", "brand": "Fiat", "model": "Uno", "year": 2010}
+```
+
+A lista aceita `?plate=` (busca exata) e `?customer_id=` (veículos de um cliente). A placa pode ser no formato antigo ou Mercosul. Um cliente que tem veículos não pode ser apagado (`409 CUSTOMER_IN_USE`).
 
 Erros seguem o formato `{"code":"INVALID_CREDENTIALS","message":"..."}`.
 
@@ -84,7 +92,7 @@ cmd/api/              ponto de entrada
 internal/platform/    config, banco e servidor HTTP
 internal/shared/      erros, dinheiro e relógio, usados por todos os contextos
 internal/identity/    login e autenticação
-internal/registry/    cadastros: clientes (veículos em seguida)
+internal/registry/    cadastros: clientes e veículos
 docs/                 decisões e documentação
 ```
 
