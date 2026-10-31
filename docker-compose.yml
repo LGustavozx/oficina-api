@@ -21,6 +21,10 @@ services:
     build: .
     environment:
       HTTP_PORT: "8080"
+      # Valores padrão só para desenvolvimento local; troque-os em qualquer outro ambiente.
+      JWT_SECRET: ${JWT_SECRET:-segredo-apenas-para-desenvolvimento-local}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@oficina.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-troque-esta-senha}
       DATABASE_URL: postgres://${POSTGRES_USER:-oficina}:${POSTGRES_PASSWORD:-oficina}@db:5432/${POSTGRES_DB:-oficina}?sslmode=disable
     ports:
       - "${HTTP_PORT:-8080}:8080"

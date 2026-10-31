@@ -3,7 +3,6 @@ package httpserver
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"time"
@@ -14,10 +13,16 @@ type Pinger interface {
 	PingContext(ctx context.Context) error
 }
 
-func NewHandler(db Pinger, logger *slog.Logger) http.Handler {
+// Registrar permite que cada contexto registre suas próprias rotas.
+type Registrar func(mux *http.ServeMux)
+
+func NewHandler(db Pinger, logger *slog.Logger, registrars ...Registrar) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler(db, logger))
-	return mux
+	for _, register := range registrars {
+		register(mux)
+	}
+	return requestLogger(logger, mux)
 }
 
 // Os timeouts evitam que clientes lentos mantenham conexões abertas indefinidamente.
@@ -47,8 +52,6 @@ func healthHandler(db Pinger, logger *slog.Logger) http.HandlerFunc {
 			status, code = "unavailable", http.StatusServiceUnavailable
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(code)
-		_ = json.NewEncoder(w).Encode(healthResponse{Status: status})
+		WriteJSON(w, code, healthResponse{Status: status})
 	}
 }
