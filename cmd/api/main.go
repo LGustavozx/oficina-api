@@ -18,6 +18,9 @@ import (
 	identityapp "oficina-api/internal/identity/application"
 	identityhttp "oficina-api/internal/identity/http"
 	identityinfra "oficina-api/internal/identity/infrastructure"
+	inventoryapp "oficina-api/internal/inventory/application"
+	inventoryhttp "oficina-api/internal/inventory/http"
+	inventoryinfra "oficina-api/internal/inventory/infrastructure"
 	"oficina-api/internal/platform/config"
 	"oficina-api/internal/platform/database"
 	"oficina-api/internal/platform/httpserver"
@@ -93,11 +96,15 @@ func run(logger *slog.Logger) error {
 	catalog := catalogapp.NewServiceCatalog(cataloginfra.NewServiceRepository(db), clk)
 	serviceHandler := cataloghttp.NewServiceHandler(catalog, logger)
 
+	inventory := inventoryapp.NewInventoryService(inventoryinfra.NewPartRepository(db), clk)
+	partHandler := inventoryhttp.NewPartHandler(inventory, logger)
+
 	handler := httpserver.NewHandler(db, logger,
 		identityHandler.Register,
 		func(mux *http.ServeMux) { customerHandler.Register(mux, identityHandler.RequireAuth) },
 		func(mux *http.ServeMux) { vehicleHandler.Register(mux, identityHandler.RequireAuth) },
 		func(mux *http.ServeMux) { serviceHandler.Register(mux, identityHandler.RequireAuth) },
+		func(mux *http.ServeMux) { partHandler.Register(mux, identityHandler.RequireAuth) },
 	)
 	server := httpserver.New(cfg.HTTPPort, handler)
 

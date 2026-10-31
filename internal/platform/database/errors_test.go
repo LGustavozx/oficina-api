@@ -11,6 +11,7 @@ import (
 func TestSQLStateChecks(t *testing.T) {
 	unique := &pgconn.PgError{Code: "23505"}
 	foreignKey := &pgconn.PgError{Code: "23503"}
+	check := &pgconn.PgError{Code: "23514"}
 	other := &pgconn.PgError{Code: "42601"}
 
 	tests := []struct {
@@ -18,13 +19,15 @@ func TestSQLStateChecks(t *testing.T) {
 		err            error
 		wantUnique     bool
 		wantForeignKey bool
+		wantCheck      bool
 	}{
-		{"violação de unicidade", unique, true, false},
-		{"violação de chave estrangeira", foreignKey, false, true},
-		{"outro erro do Postgres", other, false, false},
-		{"erro comum", errors.New("x"), false, false},
-		{"nil", nil, false, false},
-		{"embrulhado", fmt.Errorf("gravar: %w", unique), true, false},
+		{"violação de unicidade", unique, true, false, false},
+		{"violação de chave estrangeira", foreignKey, false, true, false},
+		{"violação de CHECK", check, false, false, true},
+		{"outro erro do Postgres", other, false, false, false},
+		{"erro comum", errors.New("x"), false, false, false},
+		{"nil", nil, false, false, false},
+		{"embrulhado", fmt.Errorf("gravar: %w", unique), true, false, false},
 	}
 
 	for _, tt := range tests {
@@ -34,6 +37,9 @@ func TestSQLStateChecks(t *testing.T) {
 			}
 			if got := IsForeignKeyViolation(tt.err); got != tt.wantForeignKey {
 				t.Errorf("IsForeignKeyViolation = %v, esperado %v", got, tt.wantForeignKey)
+			}
+			if got := IsCheckViolation(tt.err); got != tt.wantCheck {
+				t.Errorf("IsCheckViolation = %v, esperado %v", got, tt.wantCheck)
 			}
 		})
 	}

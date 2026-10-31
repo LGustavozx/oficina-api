@@ -2,7 +2,7 @@
 
 API REST de uma oficina mecânica: ordens de serviço, clientes, veículos, serviços e estoque de peças. Feita em Go, com PostgreSQL, para o Tech Challenge (Fase 1) da pós-graduação.
 
-O projeto está em construção. Já existem a base (config, banco, migrations, health check), os value objects do domínio (CPF/CNPJ, placa, dinheiro), o login com JWT, o cadastro de clientes, veículos e serviços e o CI. As próximas etapas são estoque de peças e ordem de serviço.
+O projeto está em construção. Já existem a base (config, banco, migrations, health check), os value objects do domínio (CPF/CNPJ, placa, dinheiro), o login com JWT, os cadastros (clientes, veículos, serviços e peças com estoque) e o CI. A próxima etapa é a ordem de serviço.
 
 ## Rodando
 
@@ -55,6 +55,19 @@ Serviços do catálogo ficam em `/admin/services`, com as mesmas 5 rotas. O pre�
 
 O nome do serviço é único (sem diferenciar maiúsculas). Preço e duração são obrigatórios e maiores que zero.
 
+Peças ficam em `/admin/parts` (mesmas 5 rotas, com busca por `?sku=`). O cadastro não define o saldo: o estoque só muda por movimentação.
+
+```json
+{"sku": "FLT-OLEO-01", "name": "Filtro de óleo", "description": "Motor 1.0", "unit_price_cents": 3590}
+```
+
+| Rota | |
+|---|---|
+| `POST /admin/parts/{id}/stock-movements` | `{"type": "IN" ou "OUT", "quantity": 10, "reason": "Compra NF 123"}`; devolve a movimentação e o `stock_quantity` atual |
+| `GET /admin/parts/{id}/stock-movements` | histórico, da mais recente para a mais antiga |
+
+Uma saída maior que o saldo é recusada com `409 INSUFFICIENT_STOCK`, mesmo com várias requisições simultâneas. O saldo máximo por peça é 1.000.000. Uma peça com histórico de movimentações não pode ser apagada.
+
 Na lista de veículos, `?plate=` faz a busca exata e `?customer_id=` (veículos de um cliente). A placa pode ser no formato antigo ou Mercosul. Um cliente que tem veículos não pode ser apagado (`409 CUSTOMER_IN_USE`).
 
 Erros seguem o formato `{"code":"INVALID_CREDENTIALS","message":"..."}`.
@@ -103,6 +116,7 @@ internal/shared/      erros, dinheiro e relógio, usados por todos os contextos
 internal/identity/    login e autenticação
 internal/registry/    cadastros: clientes e veículos
 internal/catalog/     catálogo de serviços
+internal/inventory/   peças e controle de estoque
 docs/                 decisões e documentação
 ```
 
