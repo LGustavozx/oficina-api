@@ -12,6 +12,9 @@ CRITICAL_PACKAGES=(
   oficina-api/internal/shared/money
   oficina-api/internal/shared/clock
   oficina-api/internal/registry/domain
+  oficina-api/internal/registry/application
+  oficina-api/internal/registry/infrastructure
+  oficina-api/internal/registry/http
   oficina-api/internal/identity/domain
   oficina-api/internal/identity/application
   oficina-api/internal/identity/infrastructure

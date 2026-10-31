@@ -3,7 +3,6 @@ package http
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -13,11 +12,6 @@ import (
 	"oficina-api/internal/identity/domain"
 	"oficina-api/internal/platform/httpserver"
 	"oficina-api/internal/shared/apperr"
-)
-
-const (
-	codeInvalidRequest = "INVALID_REQUEST"
-	maxBodyBytes       = 1 << 20
 )
 
 type authenticator interface {
@@ -51,11 +45,8 @@ type loginResponse struct {
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
-
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil {
-		httpserver.WriteError(w, h.logger, apperr.Validation(codeInvalidRequest, "corpo da requisição inválido"))
+	if err := httpserver.DecodeJSON(w, r, &req); err != nil {
+		httpserver.WriteError(w, h.logger, err)
 		return
 	}
 
